@@ -1,0 +1,22 @@
+[project]
+name = "quantumscribe"
+version = "2.1.24"
+description = "Ditado por voz local para Windows com faster-whisper."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = "MIT"
+authors = [{ name = "Natan Melquiades" }]
+keywords = ["speech-to-text", "whisper", "dictation", "windows", "offline"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+exclude = [".venv", "build", "dist", "temp_test"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501", "W291", "W293"]

@@ -1,0 +1,14 @@
+# ==============================================================================
+# QuantumScribe — Arquivo de Redirecionamento de Dependências
+# ==============================================================================
+# Para evitar instalar pacotes CUDA pesados em ambientes sem GPU compatível,
+# as dependências do projeto foram segmentadas. Escolha o arquivo apropriado:
+#
+# 1. Apenas CPU (Instalação padrão e leve):
+#    pip install -r requirements-cpu.txt
+#
+# 2. Com Aceleração GPU NVIDIA (CUDA):
+#    pip install -r requirements-cuda.txt
+#
+# Por padrão, o instalador e gerenciadores de pacotes usarão a versão de CPU:
+-r requirements-cpu.txt

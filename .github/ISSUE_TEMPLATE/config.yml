@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Relatar vulnerabilidade
+    url: https://github.com/Natanmelquiades/QuantumScribe/security/advisories/new
+    about: Use o canal privado para problemas de segurança.

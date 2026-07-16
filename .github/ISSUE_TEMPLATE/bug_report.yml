@@ -1,0 +1,45 @@
+name: Bug report
+description: Relate um comportamento reproduzível do QuantumScribe.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Não anexe transcrições, áudios, backups, configurações ou chaves pessoais.
+  - type: input
+    id: version
+    attributes:
+      label: Versão
+      placeholder: "2.1.24"
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Hardware de transcrição
+      options: [CPU, NVIDIA CUDA, Não sei]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: O que aconteceu?
+      description: Descreva o resultado observado e o resultado esperado.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abra...
+        2. Pressione...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized_logs
+    attributes:
+      label: Logs sanitizados
+      description: Remova textos ditados, caminhos pessoais, tokens e prompts.
+      render: text

@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Generated builds and local experiments
+build/
+dist/
+backups/
+temp_test/
+*.zip
+*.log
+*.wav
+
+# Models and user data
+models/
+.env
+.env.*
+!.env.example
+config.json
+**/config.json
+!config.example.json
+diary/
+quantum_brain/
+*.pem
+*.pfx
+*.key
+
+# Editors and OS
+.idea/
+.vscode/
+.agents/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Historical build files
+LocalWhisper.spec.bak
+
+# Keep the official PyInstaller recipe tracked.
+!QuantumScribe.spec
