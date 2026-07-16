@@ -8,6 +8,10 @@
   [![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f.svg)](LICENSE)
   [![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue.svg)](https://www.python.org/)
   [![Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://www.microsoft.com/windows)
+
+  [**Baixar para Windows**](https://github.com/Natanmelquiades/QuantumScribe/releases/latest)
+  · [Ver formas de instalação](#baixar-e-instalar)
+  · [Como usar](#como-usar)
 </div>
 
 ---
@@ -76,13 +80,33 @@ VRAM e tempo de inicialização no primeiro ditado.
 | Pro | `medium` | maior qualidade, mais memória e processamento |
 | Ultra | `large-v3` | máxima qualidade em hardware mais forte |
 
-## Instalação
+## Baixar e instalar
 
-### Instalador Windows — recomendado para uso diário
+### Escolha a forma adequada
 
-Na página de [Releases](https://github.com/Natanmelquiades/QuantumScribe/releases),
-baixe o arquivo `QuantumScribe-Setup-<versão>-Windows-x64.exe` e confira seu hash
-no `SHA256SUMS.txt` da mesma release. O instalador:
+| Forma | Para quem | O que baixar |
+|---|---|---|
+| **Instalador Windows** — recomendada | quem quer instalar e abrir como um programa normal | `QuantumScribe-Setup-<versão>-Windows-x64.exe` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
+| **Versão portátil** | desenvolvedores e testes sem instalação | `QuantumScribe-Windows-x64.zip` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
+| **Código-fonte — CPU** | desenvolvimento e contribuição | clone com Git ou [baixe o código em ZIP](https://github.com/Natanmelquiades/QuantumScribe/archive/refs/heads/main.zip) |
+| **Código-fonte — NVIDIA CUDA** | desenvolvimento com GPU NVIDIA compatível | o mesmo código-fonte, iniciado com o perfil CUDA |
+
+> [!IMPORTANT]
+> Os arquivos automáticos **Source code (zip)** e **Source code (tar.gz)** mostrados
+> no fim de cada Release contêm somente o código-fonte. Eles não são o aplicativo
+> pronto. Para instalar normalmente, escolha o arquivo que começa com
+> `QuantumScribe-Setup-`.
+
+### Opção 1 — instalador Windows, recomendada
+
+1. Abra a [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest).
+2. Na seção **Assets**, clique em
+   `QuantumScribe-Setup-<versão>-Windows-x64.exe`.
+3. Execute o arquivo baixado e avance pelo assistente.
+4. Mantenha marcado **Atalho na área de trabalho** se quiser abrir pelo desktop.
+5. Depois da instalação, abra **QuantumScribe** pelo menu Iniciar ou pelo atalho.
+
+O instalador:
 
 - instala somente para o usuário atual, sem exigir acesso de administrador;
 - adiciona o QuantumScribe ao menu Iniciar;
@@ -91,15 +115,26 @@ no `SHA256SUMS.txt` da mesma release. O instalador:
 
 > [!WARNING]
 > Os builds atuais ainda não possuem assinatura digital comercial. O Windows
-> SmartScreen pode exibir um aviso. Use apenas arquivos da página oficial de Releases
-> e valide o SHA-256 publicado.
+> SmartScreen pode exibir um aviso. Confirme que o arquivo veio da página oficial de
+> Releases. Se necessário, clique em **Mais informações > Executar assim mesmo**.
+> O hash pode ser conferido no `SHA256SUMS.txt` da mesma Release.
 
 Modelos Whisper não são empacotados no instalador. Eles continuam sendo baixados sob
 demanda e armazenados em `%LOCALAPPDATA%\QuantumScribe`.
 
-### Pelo código-fonte — recomendado para desenvolvimento
+### Opção 2 — versão portátil
 
-#### CPU — recomendada para começar
+1. Abra a [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest).
+2. Em **Assets**, baixe `QuantumScribe-Windows-x64.zip`.
+3. Clique com o botão direito no ZIP e selecione **Extrair tudo**.
+4. Abra a pasta extraída e execute `QuantumScribe.exe`.
+
+Não execute o programa diretamente de dentro do ZIP e não mova somente o `.exe`: a
+pasta `_internal` contém bibliotecas necessárias para o aplicativo funcionar.
+
+### Opção 3 — código-fonte para desenvolvimento
+
+#### Com Git — perfil CPU recomendado
 
 ```powershell
 git clone https://github.com/Natanmelquiades/QuantumScribe.git
@@ -110,7 +145,20 @@ cd QuantumScribe
 Na primeira execução, o script cria `.venv`, instala o perfil CPU e inicia o app. Nas
 execuções seguintes, ele abre diretamente sem reinstalar tudo.
 
-#### GPU NVIDIA CUDA
+#### Sem Git — código-fonte em ZIP
+
+1. [Baixe o código-fonte da branch `main`](https://github.com/Natanmelquiades/QuantumScribe/archive/refs/heads/main.zip).
+2. Extraia o ZIP.
+3. Abra o PowerShell dentro da pasta extraída.
+4. Execute:
+
+```powershell
+.\run.ps1
+```
+
+Essa opção requer Python 3.11, 3.12 ou 3.13 instalado no computador.
+
+#### Perfil NVIDIA CUDA
 
 ```powershell
 .\run.ps1 -Setup -Cuda
