@@ -34,7 +34,14 @@ jobs:
         run: python -m pip install -r requirements-test.txt
 
       - name: Compile Python sources
-        run: python -m compileall -q main.py localwhisper tests
+        run: python -m compileall -q main.py localwhisper scripts tests
+
+      - name: Lint
+        run: python -m ruff check main.py localwhisper scripts tests
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Audit locked CPU dependencies
+        if: matrix.python-version == '3.13'
+        run: python -m pip_audit -r requirements-cpu.lock --no-deps --progress-spinner off

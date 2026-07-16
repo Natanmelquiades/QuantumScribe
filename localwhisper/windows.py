@@ -45,6 +45,8 @@ user32.AllowSetForegroundWindow.restype = wintypes.BOOL
 kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
 kernel32.CreateMutexW.restype = wintypes.HANDLE
 kernel32.GetLastError.restype = wintypes.DWORD
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
 
 # Constantes da API Win32
 CF_UNICODETEXT = 13
@@ -116,8 +118,18 @@ def acquire_single_instance() -> bool:
     Cria um Mutex global com nome persistente no sistema operacional.
     """
     global _instance_mutex
-    _instance_mutex = kernel32.CreateMutexW(None, False, "LocalWhisper.SingleInstance")
-    return bool(_instance_mutex) and kernel32.GetLastError() != ERROR_ALREADY_EXISTS
+    handle = kernel32.CreateMutexW(None, False, "LocalWhisper.SingleInstance")
+    if not handle:
+        return False
+
+    if kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
+        # Não retenha um segundo handle: isso impediria a nova tentativa feita
+        # depois que o usuário confirma a reinicialização do aplicativo.
+        kernel32.CloseHandle(handle)
+        return False
+
+    _instance_mutex = handle
+    return True
 
 
 def set_clipboard_text(text: str) -> None:

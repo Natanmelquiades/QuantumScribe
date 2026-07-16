@@ -76,9 +76,30 @@ VRAM e tempo de inicialização no primeiro ditado.
 | Pro | `medium` | maior qualidade, mais memória e processamento |
 | Ultra | `large-v3` | máxima qualidade em hardware mais forte |
 
-## Instalação rápida
+## Instalação
 
-### CPU — recomendada para começar
+### Instalador Windows — recomendado para uso diário
+
+Na página de [Releases](https://github.com/Natanmelquiades/QuantumScribe/releases),
+baixe o arquivo `QuantumScribe-Setup-<versão>-Windows-x64.exe` e confira seu hash
+no `SHA256SUMS.txt` da mesma release. O instalador:
+
+- instala somente para o usuário atual, sem exigir acesso de administrador;
+- adiciona o QuantumScribe ao menu Iniciar;
+- oferece um atalho opcional na área de trabalho;
+- aparece normalmente em **Configurações > Aplicativos instalados** para desinstalação.
+
+> [!WARNING]
+> Os builds atuais ainda não possuem assinatura digital comercial. O Windows
+> SmartScreen pode exibir um aviso. Use apenas arquivos da página oficial de Releases
+> e valide o SHA-256 publicado.
+
+Modelos Whisper não são empacotados no instalador. Eles continuam sendo baixados sob
+demanda e armazenados em `%LOCALAPPDATA%\QuantumScribe`.
+
+### Pelo código-fonte — recomendado para desenvolvimento
+
+#### CPU — recomendada para começar
 
 ```powershell
 git clone https://github.com/Natanmelquiades/QuantumScribe.git
@@ -89,7 +110,7 @@ cd QuantumScribe
 Na primeira execução, o script cria `.venv`, instala o perfil CPU e inicia o app. Nas
 execuções seguintes, ele abre diretamente sem reinstalar tudo.
 
-### GPU NVIDIA CUDA
+#### GPU NVIDIA CUDA
 
 ```powershell
 .\run.ps1 -Setup -Cuda
@@ -99,8 +120,15 @@ execuções seguintes, ele abre diretamente sem reinstalar tudo.
 > O perfil CUDA instala pacotes grandes. Verifique espaço em disco e compatibilidade
 > do driver NVIDIA. Se CUDA falhar, o transcritor tenta recuar para CPU.
 
-Também é possível abrir `Iniciar.bat` com duplo clique depois que o ambiente estiver
-preparado.
+Depois que o ambiente estiver preparado, `Iniciar.bat` continua disponível como um
+atalho de conveniência para quem estiver trabalhando diretamente no código-fonte.
+
+### Desinstalação
+
+Remova o QuantumScribe pela tela de aplicativos instalados do Windows. Configurações,
+modelos, notas e histórico em `%LOCALAPPDATA%\QuantumScribe` são preservados para
+evitar perda acidental; apague essa pasta manualmente apenas se também quiser remover
+seus dados locais.
 
 ## Como usar
 
@@ -181,12 +209,19 @@ Os módulos principais estão documentados no próprio código. Consulte
 ## Build para Windows
 
 ```powershell
-.\build.ps1          # perfil CPU
-.\build.ps1 -Cuda    # perfil CUDA
+.\build.ps1                    # pasta portátil, perfil CPU
+.\build.ps1 -Cuda              # pasta portátil, perfil CUDA
+.\build.ps1 -Installer         # pasta portátil + instalador CPU
 ```
 
-O PyInstaller gera `dist\QuantumScribe\`. Distribua a pasta inteira compactada, não
-somente o `.exe`, porque as DLLs e bibliotecas fazem parte do aplicativo.
+O build usa os lockfiles reproduzíveis dentro de uma `.venv-build` isolada e gera
+`dist\QuantumScribe\`. Distribua a pasta inteira compactada, não somente o `.exe`,
+porque as DLLs e bibliotecas fazem parte do aplicativo. Para gerar o instalador também
+é necessário ter o
+[NSIS](https://nsis.sourceforge.io/) instalado.
+
+Tags `v*` acionam o workflow de release, que testa o código, produz o ZIP portátil e o
+instalador, calcula os hashes SHA-256 e anexa os três arquivos à GitHub Release.
 
 ## Solução de problemas
 
@@ -204,7 +239,7 @@ Ao relatar um bug, não anexe configurações, áudios ou transcrições pessoai
 
 ## Roadmap
 
-- instalador Windows assinado;
+- assinatura digital dos executáveis e do instalador Windows;
 - benchmarks reproduzíveis de modelos e hardware;
 - mais testes de integração de áudio e hotkeys;
 - internacionalização da interface;

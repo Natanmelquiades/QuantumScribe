@@ -2,6 +2,23 @@
 
 Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
+## [2.1.25] - 2026-07-16
+
+### Adicionado
+- Instalador Windows por usuário com menu Iniciar, atalho opcional na área de trabalho e desinstalação padrão.
+- Ícone e metadados de versão incorporados ao executável e ao instalador.
+- Release automatizada com instalador, ZIP portátil e hashes SHA-256 de ambos.
+- Testes de consistência da versão e dos arquivos necessários para empacotamento.
+
+### Corrigido
+- A segunda tentativa de adquirir a instância única não retém mais um handle de mutex inválido.
+- O executável empacotado deixa de procurar um ambiente virtual `.venv` dentro do bundle.
+- O instalador passa a compilar o script como UTF-8, preservando corretamente os acentos em português.
+
+### Qualidade
+- Builds agora usam os lockfiles CPU/CUDA em vez de intervalos de dependências não reproduzíveis.
+- CI passa a executar Ruff e auditoria de vulnerabilidades do lockfile CPU.
+
 ## [2.1.24] - 2026-07-16
 
 ### Adicionado

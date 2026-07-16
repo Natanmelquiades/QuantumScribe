@@ -10,6 +10,7 @@ htmlcov/
 
 # Virtual environments
 .venv/
+.venv-build/
 venv/
 env/
 
@@ -46,6 +47,9 @@ desktop.ini
 
 # Historical build files
 LocalWhisper.spec.bak
+
+# Internal publication audit reports
+docs/AUDITORIA_PUBLICACAO_*.md
 
 # Keep the official PyInstaller recipe tracked.
 !QuantumScribe.spec

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+datas = [('localwhisper/assets/icon.png', 'localwhisper/assets')]
 binaries = []
 hiddenimports = ['silero_vad', 'torch', 'scipy', 'noisereduce', 'huggingface_hub']
 tmp_ret = collect_all('faster_whisper')
@@ -33,6 +33,8 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='QuantumScribe',
+    icon='localwhisper/assets/icon.png',
+    version='build/QuantumScribe.version.txt',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

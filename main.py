@@ -9,6 +9,11 @@ def check_and_restart_in_venv():
     """Verifica se o script está rodando com o interpretador do ambiente virtual (.venv).
     Se não estiver, reinicia a si mesmo usando o pythonw.exe do .venv.
     """
+    # O executável PyInstaller já contém seu próprio runtime. Procurar uma .venv
+    # dentro do bundle só adiciona trabalho e pode causar comportamento inesperado.
+    if getattr(sys, "frozen", False):
+        return
+
     project_dir = Path(__file__).resolve().parent
     venv_dir = project_dir / ".venv"
     current_exe = Path(sys.executable).resolve()

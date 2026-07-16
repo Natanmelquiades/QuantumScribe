@@ -20,26 +20,50 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements-cpu.txt
+          cache-dependency-path: |
+            requirements-cpu.lock
+            requirements-test.txt
 
       - name: Install CPU build dependencies
-        run: python -m pip install -r requirements-cpu.txt -r requirements-test.txt
+        run: python -m pip install -r requirements-test.txt
 
-      - name: Test
-        run: python -m pytest -q
+      - name: Validate release candidate
+        run: |
+          python -m compileall -q main.py localwhisper scripts tests
+          python -m ruff check main.py localwhisper scripts tests
+          python -m pytest -q
+          python -m pip_audit -r requirements-cpu.lock --no-deps --progress-spinner off
 
-      - name: Build with PyInstaller
-        run: python -m PyInstaller --noconfirm QuantumScribe.spec
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
 
-      - name: Create ZIP and checksum
+      - name: Build portable app and installer
+        shell: pwsh
+        run: .\build.ps1 -Installer
+
+      - name: Create portable ZIP and checksums
         shell: pwsh
         run: |
           Compress-Archive -Path dist\QuantumScribe\* -DestinationPath QuantumScribe-Windows-x64.zip
-          $hash = (Get-FileHash QuantumScribe-Windows-x64.zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  QuantumScribe-Windows-x64.zip" | Set-Content SHA256SUMS.txt -Encoding ascii
+          $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
+          $files = @("QuantumScribe-Windows-x64.zip", $installer.FullName)
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            "$hash  $(Split-Path $file -Leaf)"
+          }
+          $lines | Set-Content SHA256SUMS.txt -Encoding ascii
 
       - name: Create GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" QuantumScribe-Windows-x64.zip SHA256SUMS.txt --generate-notes --verify-tag
+        run: |
+          $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
+          $tag = "${{ github.ref_name }}"
+          $assets = @("QuantumScribe-Windows-x64.zip", $installer.FullName, "SHA256SUMS.txt")
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $assets --clobber
+          } else {
+            gh release create $tag $assets --generate-notes --verify-tag
+          }

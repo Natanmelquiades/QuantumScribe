@@ -13,6 +13,7 @@ por cada pacote continuam sendo a fonte oficial.
 | pystray | ícone da bandeja | LGPLv3 |
 | Pillow | imagens e ícones | HPND/MIT-CMU |
 | PyInstaller | empacotamento | GPLv2+ com exceção para distribuição |
+| NSIS | geração do instalador Windows | zlib/libpng e licenças de módulos |
 | comtypes | integração Windows | MIT |
 | uiautomation | automação Windows | Apache-2.0 |
 | tokenizers | tokenização | Apache-2.0 |
