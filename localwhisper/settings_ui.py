@@ -19,7 +19,7 @@ from typing import Callable
 from PIL import Image, ImageDraw, ImageTk
 
 from .backup import create_backup, delete_backup, get_project_root, list_backups, restore_backup
-from .config import AppConfig, is_model_downloaded, model_dir
+from .config import AppConfig, is_model_downloaded
 from .diary import diary_dir
 from .hotkey import _parse_hotkey
 
@@ -273,6 +273,7 @@ class SettingsWindow(tk.Toplevel):
         # Variáveis Tkinter
         self.paste_var = tk.BooleanVar(value=self.current_config.auto_paste)
         self.sounds_var = tk.BooleanVar(value=self.current_config.play_sounds)
+        self.sound_volume_var = tk.DoubleVar(value=self.current_config.sound_volume)
 
         self._theme_id_map = {
             "Bolinhas (padrão)": "dots",
@@ -294,7 +295,7 @@ class SettingsWindow(tk.Toplevel):
 
         self.friendly_to_id = {model["name"]: model_id for model_id, model in MODELS_MAP.items()}
         self.id_to_friendly = {model_id: model["name"] for model_id, model in MODELS_MAP.items()}
-        current_friendly = self.id_to_friendly.get(self.current_config.model, "Equilibrado (Small)")
+        current_friendly = self.id_to_friendly.get(self.current_config.model, "Alto Desempenho / Pro (Medium)")
         self.model_name_var = tk.StringVar(value=current_friendly)
 
         self._lang_friendly_map = {
@@ -980,7 +981,7 @@ class SettingsWindow(tk.Toplevel):
 
         self.volume_slider = tk.Scale(
             self.volume_row, from_=0.0, to=1.0, resolution=0.05, orient="horizontal",
-            variable=tk.DoubleVar(value=self.current_config.sound_volume),
+            variable=self.sound_volume_var,
             bg=CARD_BG, fg=TEXT_COLOR, troughcolor=INPUT_BG, activebackground=ACCENT_COLOR,
             highlightthickness=0, bd=0, showvalue=True, length=180, font=("Segoe UI", 8)
         )
@@ -1349,7 +1350,7 @@ class SettingsWindow(tk.Toplevel):
 
     def _on_model_changed(self, event: object = None) -> None:
         friendly = self.model_name_var.get()
-        model_id = self.friendly_to_id.get(friendly, "small")
+        model_id = self.friendly_to_id.get(friendly, "medium")
         model_info = MODELS_MAP.get(model_id)
 
         self.model_desc_label = tk.Label(self.download_status_frame, text="", font=("Segoe UI", 8), fg=MUTED_COLOR, bg=CARD_BG)
@@ -1359,15 +1360,10 @@ class SettingsWindow(tk.Toplevel):
             self.download_status_label.configure(text="✓ Modelo Whisper baixado e pronto", fg=SUCCESS_COLOR)
             self.download_btn.pack_forget()
         else:
-            # Se o modelo selecionado for o atualmente configurado, mas não estiver baixado, e o effective_model for small
-            effective = getattr(self.current_config, "effective_model", "small")
-            if model_id == getattr(self.current_config, "model", "small") and effective == "small" and model_id != "small":
-                self.download_status_label.configure(
-                    text=f"⚠ Modelo '{friendly}' não encontrado — usando Small nesta sessão. [Baixar agora]",
-                    fg=DANGER_COLOR
-                )
-            else:
-                self.download_status_label.configure(text="⚠ Necessário download do modelo Whisper para uso", fg=DANGER_COLOR)
+            self.download_status_label.configure(
+                text="Download pendente — será instalado automaticamente ou pode baixar agora",
+                fg=DANGER_COLOR,
+            )
             self.download_btn.pack(side="left", pady=(5, 0))
 
     def _on_rewriter_toggled(self) -> None:
@@ -1387,7 +1383,7 @@ class SettingsWindow(tk.Toplevel):
 
     def _download_selected_model(self) -> None:
         friendly = self.model_name_var.get()
-        model_id = self.friendly_to_id.get(friendly, "small")
+        model_id = self.friendly_to_id.get(friendly, "medium")
 
         self._set_widgets_state("disabled")
 
@@ -1398,77 +1394,11 @@ class SettingsWindow(tk.Toplevel):
         self.download_progress_bar.start(10)
         self.download_status_label.configure(text="Buscando metadados no Hugging Face...", fg=MUTED_COLOR)
 
-        import tqdm
-        import tqdm.auto
-
-        original_tqdm = tqdm.tqdm
-        original_auto_tqdm = tqdm.auto.tqdm
-
-        active_trackers = []
-        tracker_lock = threading.Lock()
-
-        class CustomTqdm:
-            def __init__(self, *args, **kwargs):
-                self._tqdm = original_tqdm(*args, **kwargs)
-                self.total = kwargs.get("total") or getattr(self._tqdm, "total", 0)
-                self.n = getattr(self._tqdm, "n", 0)
-                self.desc = kwargs.get("desc") or getattr(self._tqdm, "desc", "")
-                with tracker_lock:
-                    active_trackers.append(self)
-                self.update(0)
-
-            def update(self, n=1):
-                res = self._tqdm.update(n)
-                self.n = getattr(self._tqdm, "n", 0)
-
-                large_tracker = None
-                with tracker_lock:
-                    for tracker in active_trackers:
-                        if tracker.total and tracker.total > 10 * 1024 * 1024:
-                            if large_tracker is None or tracker.total > large_tracker.total:
-                                large_tracker = tracker
-
-                if large_tracker:
-                    percent = (large_tracker.n / large_tracker.total) * 100
-                    def _update():
-                        self.download_progress_bar.stop()
-                        self.download_progress_var.set(percent)
-                        self.download_progress_bar.configure(mode="determinate")
-                        self.download_status_label.configure(
-                            text=f"Baixando: {percent:.1f}% ({large_tracker.n / (1024*1024):.1f}MB de {large_tracker.total / (1024*1024):.1f}MB)",
-                            fg=ACCENT_COLOR
-                        )
-                    self.after(0, _update)
-                else:
-                    def _update_connecting():
-                        self.download_progress_bar.configure(mode="indeterminate")
-                        self.download_progress_bar.start(10)
-                        self.download_status_label.configure(text="Conectando e baixando...", fg=MUTED_COLOR)
-                    self.after(0, _update_connecting)
-                return res
-
-            def close(self):
-                res = self._tqdm.close()
-                with tracker_lock:
-                    if self in active_trackers:
-                        active_trackers.remove(self)
-                return res
-
-            def set_description(self, desc, refresh=True):
-                res = self._tqdm.set_description(desc, refresh)
-                self.desc = desc
-                return res
-
-            def __getattr__(self, name):
-                return getattr(self._tqdm, name)
-
         def download_thread():
-            tqdm.tqdm = CustomTqdm
-            tqdm.auto.tqdm = CustomTqdm
-
-            from faster_whisper import download_model
             try:
-                download_model(model_id, output_dir=str(model_dir()))
+                from .model_manager import ensure_model_downloaded
+
+                ensure_model_downloaded(model_id)
                 def on_success():
                     self.download_progress_bar.stop()
                     self._set_widgets_state("normal")
@@ -1484,9 +1414,6 @@ class SettingsWindow(tk.Toplevel):
                     self._on_model_changed()
                     self.error_label.configure(text=f"Falha ao baixar modelo: {err}", fg=DANGER_COLOR)
                 self.after(0, on_failure)
-            finally:
-                tqdm.tqdm = original_tqdm
-                tqdm.auto.tqdm = original_auto_tqdm
 
         threading.Thread(target=download_thread, daemon=True).start()
 
@@ -1914,7 +1841,7 @@ class SettingsWindow(tk.Toplevel):
         if mic_selected == "Padrão do Sistema":
             mic_selected = ""
 
-        selected_model_id = self.friendly_to_id.get(self.model_name_var.get(), "small")
+        selected_model_id = self.friendly_to_id.get(self.model_name_var.get(), "medium")
 
         custom_dict = self.current_config.custom_dict
 
@@ -1924,6 +1851,7 @@ class SettingsWindow(tk.Toplevel):
             device=self.device_var.get(),
             compute_type=self.compute_var.get(),
             preload_model=getattr(self.current_config, "preload_model", False),
+            auto_download_model=getattr(self.current_config, "auto_download_model", True),
             audio_device=mic_selected,
             auto_paste=self.paste_var.get(),
             hotkey=hotkey_normal,
@@ -1938,7 +1866,7 @@ class SettingsWindow(tk.Toplevel):
             quantum_brain_api_key=getattr(self.current_config, "quantum_brain_api_key", ""),
             initial_prompt=self.prompt_text.get("1.0", "end-1c").strip() if self.prompt_text is not None else (getattr(self.current_config, "initial_prompt", "") or ""),
             play_sounds=self.sounds_var.get(),
-            sound_volume=float(self.volume_slider.get()),
+            sound_volume=float(self.sound_volume_var.get()),
             hud_theme=self._theme_id_map.get(self.hud_theme_var.get(), "dots"),
             atom_color=self._atom_color_val,
             custom_dict=custom_dict,

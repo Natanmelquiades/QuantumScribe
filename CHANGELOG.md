@@ -2,6 +2,24 @@
 
 Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
+## [Não publicado]
+
+## [2.1.26] - 2026-07-17
+
+### Adicionado
+- Primeira instalação passa a selecionar o modelo Pro (`medium`) e baixá-lo automaticamente em segundo plano.
+- Gerenciador único de modelos valida arquivos essenciais, retoma downloads interrompidos e evita downloads duplicados simultâneos.
+
+### Corrigido
+- Seleção de hardware agora detecta CUDA antes de carregar o modelo e usa CPU preventivamente quando GPU, cuBLAS ou cuDNN não estiverem disponíveis.
+- Builds universais passam a incluir as DLLs NVIDIA necessárias e a release oficial usa o perfil adaptativo CPU/CUDA.
+- Salvamento das configurações não depende mais de abrir previamente o painel que cria o controle de volume.
+- Download iniciado nas configurações agora usa o mesmo cache esperado pelo `faster-whisper`.
+- Modelo ausente não recua silenciosamente para `small`; a preferência escolhida é instalada e mantida.
+
+### Validado
+- Instalação limpa com download real, carga e transcrição em CPU, além de carga e transcrição CUDA em uma RTX 2060.
+
 ## [2.1.25] - 2026-07-16
 
 ### Adicionado

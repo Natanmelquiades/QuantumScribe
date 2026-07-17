@@ -60,42 +60,12 @@ def setup_logging():
 
     sys.excepthook = handle_exception
 
-def setup_cuda_dlls():
-    """Mapeia os caminhos de instalação das DLLs do pacote nvidia e os expõe ao Windows."""
-    if sys.platform != "win32":
-        return
-
-    cuda_paths = []
-    # Busca a pasta 'nvidia' em todas as rotas do sys.path
-    for path in sys.path:
-        if not path:
-            continue
-        # Resolve para caminho absoluto
-        nvidia_path = Path(path).resolve() / "nvidia"
-        if nvidia_path.is_dir():
-            # Mapeia subdiretórios com DLLs e registra no Windows
-            registered = set()
-            for root, dirs, files in os.walk(str(nvidia_path)):
-                for file in files:
-                    if file.lower().endswith(".dll"):
-                        abs_root = os.path.abspath(root)
-                        if abs_root not in registered:
-                            try:
-                                os.add_dll_directory(abs_root)
-                                registered.add(abs_root)
-                                cuda_paths.append(abs_root)
-                            except Exception:
-                                pass
-                            break
-
-    if cuda_paths:
-        # Prende os caminhos de CUDA no topo do PATH do processo atual
-        os.environ["PATH"] = ";".join(cuda_paths) + ";" + os.environ.get("PATH", "")
-
 # Configura o sistema de logs antes de importar e iniciar o app
 setup_logging()
 
 # Configura caminhos das DLLs CUDA antes de iniciar
+from localwhisper.hardware import setup_cuda_dlls  # noqa: E402
+
 setup_cuda_dlls()
 
 from localwhisper.app import main  # noqa: E402 (CUDA paths must be registered first)

@@ -1,9 +1,10 @@
 {
-  "model": "small",
+  "model": "medium",
   "language": "pt",
-  "device": "cpu",
-  "compute_type": "int8",
+  "device": "auto",
+  "compute_type": "auto",
   "preload_model": false,
+  "auto_download_model": true,
   "auto_paste": true,
   "hotkey": "Ctrl+Space",
   "hotkey_translate": "Ctrl+Alt+Space",

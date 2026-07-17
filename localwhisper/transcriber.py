@@ -17,7 +17,8 @@ if TYPE_CHECKING:
     import numpy as np
     from faster_whisper import WhisperModel
 
-from .config import AppConfig, model_dir
+from .config import AppConfig, is_model_downloaded, model_dir
+from .hardware import resolve_hardware
 
 # ---------------------------------------------------------------------------
 # Thresholds de qualidade da transcrição (faster-whisper)
@@ -57,6 +58,7 @@ class LocalTranscriber:
         self._decode_lock = threading.Lock()
         self._cancel_event = threading.Event()
         self._current_device: str | None = None
+        self._current_compute_type: str | None = None
 
     def is_loaded(self) -> bool:
         """Retorna True se o modelo já foi carregado na memória."""
@@ -77,42 +79,51 @@ class LocalTranscriber:
             if self._model is not None:
                 return
 
+            model_name = (
+                getattr(self.config, "effective_model", "") or self.config.model
+            )
+            if not is_model_downloaded(model_name):
+                self.on_status(f"Baixando modelo {model_name} — aguarde...")
+                from .model_manager import ensure_model_downloaded
+
+                ensure_model_downloaded(model_name)
+
             from faster_whisper import WhisperModel
 
-            # Configura dispositivo padrão
-            device = "cpu" if self.config.device == "auto" else self.config.device
-            compute_type = self.config.compute_type
-
-            # Ajusta precisão automática por dispositivo
-            if compute_type == "auto":
-                if device == "cpu":
-                    compute_type = "int8"
-                else:
-                    # CUDA: float16 é o padrão para GPU moderna (RTX 2060+)
-                    compute_type = "float16"
+            selection = resolve_hardware(self.config.device, self.config.compute_type)
+            device = selection.device
+            compute_type = selection.compute_type
+            if self.config.device != "cpu" and device == "cpu":
+                self.on_status("CUDA indisponível. Usando CPU...")
+                print(f"[Hardware] {selection.detail}. Usando CPU/{compute_type}.")
+            else:
+                print(f"[Hardware] {selection.detail}. Usando {device}/{compute_type}.")
 
             # Inicializa o modelo usando o diretório local configurado
             try:
                 self._model = WhisperModel(
-                    getattr(self.config, "effective_model", self.config.model) or self.config.model,
+                    model_name,
                     device=device,
                     compute_type=compute_type,
                     download_root=str(model_dir()),
                 )
                 self._current_device = device
+                self._current_compute_type = compute_type
             except Exception as error:
                 # Se falhar ao carregar no CUDA (ex: DLL ausente, driver incompatível, hardware sem NVIDIA)
                 if device == "cuda":
                     self.on_status("CUDA indisponível. Recuando para CPU...")
                     device = "cpu"
-                    compute_type = "int8" if self.config.compute_type == "auto" else self.config.compute_type
+                    cpu_selection = resolve_hardware("cpu", self.config.compute_type)
+                    compute_type = cpu_selection.compute_type
                     self._model = WhisperModel(
-                        getattr(self.config, "effective_model", self.config.model) or self.config.model,
+                        model_name,
                         device=device,
                         compute_type=compute_type,
                         download_root=str(model_dir()),
                     )
                     self._current_device = device
+                    self._current_compute_type = compute_type
                 else:
                     raise error
 
@@ -303,7 +314,8 @@ class LocalTranscriber:
                 with self._lock:
                     from faster_whisper import WhisperModel
                     device = "cpu"
-                    compute_type = "int8" if self.config.compute_type == "auto" else self.config.compute_type
+                    cpu_selection = resolve_hardware("cpu", self.config.compute_type)
+                    compute_type = cpu_selection.compute_type
                     self._model = WhisperModel(
                         getattr(self.config, "effective_model", self.config.model) or self.config.model,
                         device=device,
@@ -311,6 +323,7 @@ class LocalTranscriber:
                         download_root=str(model_dir()),
                     )
                     self._current_device = device
+                    self._current_compute_type = compute_type
 
                 # Tenta novamente a transcrição usando o novo modelo em CPU
                 # (sem watchdog extra — já estamos em fallback)
@@ -440,4 +453,5 @@ class LocalTranscriber:
                 self.config.compute_type != config.compute_type):
                 self._model = None
                 self._current_device = None
+                self._current_compute_type = None
             self.config = config
