@@ -9,6 +9,6 @@ uiautomation>=2.0.29,<3.0
 tokenizers>=0.20,<1.0
 noisereduce>=3.0,<4.0
 scipy>=1.13,<2.0
-silero-vad>=5.1,<6.0
+silero-vad>=6.2.1,<7.0
 torch>=2.0,<3.0
 pyyaml>=6.0,<7.0
