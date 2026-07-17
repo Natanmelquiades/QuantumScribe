@@ -41,7 +41,7 @@ VIAddVersionKey /LANG=1046 "ProductVersion" "${APP_VERSION}"
 !define MUI_ABORTWARNING
 !define MUI_ICON "..\build\QuantumScribe.ico"
 !define MUI_UNICON "..\build\QuantumScribe.ico"
-!define MUI_WELCOMEPAGE_TEXT "Este assistente instala o ${APP_NAME} somente para o usuário atual e adiciona um atalho ao menu Iniciar.$\r$\n$\r$\nOs modelos de IA não fazem parte do instalador e serão baixados sob demanda."
+!define MUI_WELCOMEPAGE_TEXT "Este assistente instala o ${APP_NAME} somente para o usuário atual e adiciona um atalho ao menu Iniciar.$\r$\n$\r$\nNa primeira execução, o modelo Pro será baixado automaticamente (cerca de 1,5 GB)."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Abrir o ${APP_NAME}"
 

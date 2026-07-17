@@ -19,12 +19,13 @@ APP_NAME = "QuantumScribe"
 @dataclass(slots=True)
 class AppConfig:
     """Dataclass que mapeia todas as opções de configuração do aplicativo."""
-    model: str = "small"            # Modelo Whisper a usar (tiny, base, small, medium, large-v3)
-    effective_model: str = ""      # Modelo em uso real na sessão (fallback se preferido não baixado)
+    model: str = "medium"           # Padrão Pro; baixado automaticamente na primeira execução
+    effective_model: str = ""      # Modelo efetivo da sessão (normalmente igual a model)
     language: str = "pt"           # Idioma da transcrição ('pt' para português ou vazio para auto)
-    device: str = "cpu"            # Dispositivo físico de processamento ('cpu', 'cuda' para GPU)
-    compute_type: str = "int8"     # Tipo de precisão matemática para computação ('int8', 'float16', etc.)
+    device: str = "auto"           # Detecta CUDA automaticamente e recua preventivamente para CPU
+    compute_type: str = "auto"     # Seleciona uma precisão suportada pelo dispositivo efetivo
     preload_model: bool = False    # Carregar sob demanda para manter inicialização e bandeja responsivas
+    auto_download_model: bool = True  # Baixar/retomar o modelo escolhido automaticamente
     auto_paste: bool = True        # Insere automaticamente o texto no local focado após a transcrição
     hotkey: str = "Ctrl+Space"     # Atalho de teclado global para iniciar/parar gravação
     initial_prompt: str = (
@@ -74,6 +75,11 @@ class AppConfig:
     quantum_brain_also_paste: bool = True          # Também cola o texto no cursor (como o modo normal)
     quantum_brain_api_key: str = ""               # Reservado para futura integração cloud
 
+    def __post_init__(self) -> None:
+        """Mantém o modelo efetivo alinhado quando a configuração nasce em memória."""
+        if not self.effective_model:
+            self.effective_model = self.model
+
 
 def app_data_dir() -> Path:
     """Retorna o diretório base para salvar arquivos locais do aplicativo.
@@ -117,20 +123,10 @@ def load_config() -> AppConfig:
         if raw.get("llm_model_repo") == "michaelfeil/ct2fast-Qwen1.5-0.5B-Chat":
             raw["llm_model_repo"] = "jncraton/Qwen2.5-0.5B-Instruct-ct2-int8"
 
-        # Patch: se o modelo configurado não estiver baixado localmente, recua para 'small'
-        # Isso evita que a migração de config.json cause download de 3GB na primeira transcrição
-        configured_model = raw.get("model", "small")
-        effective_model = configured_model
-        if configured_model != "small":
-            from pathlib import Path as _Path
-            _models_path = _Path(os.environ.get("LOCALAPPDATA", _Path.home())) / APP_NAME / "models"
-            _model_ok = _has_complete_model_snapshot(_models_path, configured_model)
-            if not _model_ok:
-                print(f"[QuantumScribe] Modelo '{configured_model}' não encontrado localmente. Usando 'small' nesta sessão.")
-                effective_model = "small"
-
-        # Define o modelo efetivo em raw (sem corromper o modelo configurado original)
-        raw["effective_model"] = effective_model
+        # O modelo escolhido continua sendo o modelo efetivo mesmo quando ainda não foi
+        # baixado. O gerenciador de modelos instala ou retoma o download automaticamente.
+        configured_model = raw.get("model", AppConfig.__dataclass_fields__["model"].default)
+        raw["effective_model"] = configured_model
 
         # Corrige initial_prompt com encoding quebrado (contém \uFFFD = leitura corrompida)
         stored_prompt = raw.get("initial_prompt", "")
@@ -148,7 +144,12 @@ def load_config() -> AppConfig:
         # Filtra apenas os parâmetros válidos permitidos para evitar erros de inicialização
         return AppConfig(**{key: value for key, value in raw.items() if key in allowed})
     except (OSError, ValueError, TypeError):
-        return AppConfig()
+        config = AppConfig()
+        try:
+            save_config(config)
+        except OSError:
+            pass
+        return config
 
 
 def save_config(config: AppConfig) -> None:

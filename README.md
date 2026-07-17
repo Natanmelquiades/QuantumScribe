@@ -37,7 +37,7 @@ trocar palavras.
 - **Atalhos globais:** dite em navegadores, editores, chats e ferramentas de trabalho.
 - **Auto-paste e autoenvio:** cola no cursor e, opcionalmente, pressiona Enter.
 - **Tradução sob demanda:** produz texto em inglês usando o próprio Whisper.
-- **CPU ou NVIDIA CUDA:** escolha portabilidade ou aceleração por GPU.
+- **CPU ou NVIDIA CUDA:** detecta automaticamente a GPU e usa CPU quando CUDA não estiver disponível.
 - **Quantum Brain:** transforma ditados em notas Markdown locais e sínteses offline.
 - **Configuração visual:** modelos, áudio, atalhos, HUD, backups e histórico em um só painel.
 
@@ -76,8 +76,8 @@ VRAM e tempo de inicialização no primeiro ditado.
 |---|---|---|
 | Super leve | `tiny` | máquinas simples e testes rápidos |
 | Leve | `base` | ditado curto com baixo consumo |
-| Equilibrado | `small` | padrão recomendado para a maioria dos usuários |
-| Pro | `medium` | maior qualidade, mais memória e processamento |
+| Equilibrado | `small` | alternativa mais leve para máquinas simples |
+| Pro | `medium` | padrão; maior qualidade para uso diário e termos técnicos |
 | Ultra | `large-v3` | máxima qualidade em hardware mais forte |
 
 ## Baixar e instalar
@@ -109,6 +109,8 @@ VRAM e tempo de inicialização no primeiro ditado.
 O instalador:
 
 - instala somente para o usuário atual, sem exigir acesso de administrador;
+- inclui aceleração NVIDIA CUDA, mas continua funcionando automaticamente em máquinas somente CPU;
+- baixa automaticamente o modelo Pro (`medium`, cerca de 1,5 GB) na primeira execução e retoma o download se a conexão cair;
 - adiciona o QuantumScribe ao menu Iniciar;
 - oferece um atalho opcional na área de trabalho;
 - aparece normalmente em **Configurações > Aplicativos instalados** para desinstalação.
@@ -186,9 +188,10 @@ seus dados locais.
 4. Pressione `Ctrl+Space` novamente para concluir.
 5. Aguarde a transcrição local e a inserção automática.
 
-O modelo é carregado sob demanda no primeiro ditado para que a bandeja e as
-configurações abram rapidamente. O primeiro processamento da sessão pode demorar
-mais; os seguintes reutilizam o modelo em memória.
+Na primeira execução, o modelo Pro é baixado em segundo plano. O modelo é carregado
+na memória somente no primeiro ditado para que a bandeja e as configurações abram
+rapidamente. O primeiro processamento da sessão pode demorar mais; os seguintes
+reutilizam o modelo em memória.
 
 ### Atalhos padrão
 
@@ -228,7 +231,8 @@ Opções importantes:
 - `literal_mode`: preserva as palavras sem pós-reescrita;
 - `punctuation_assist`: melhora sinais terminais e pausas;
 - `preload_model`: se `false`, carrega o modelo no primeiro ditado;
-- `device`: `cpu`, `cuda` ou `auto`;
+- `auto_download_model`: baixa ou retoma automaticamente o modelo escolhido;
+- `device`: `auto` (recomendado), `cpu` ou `cuda`; mesmo com preferência CUDA, o app recua preventivamente para CPU se necessário;
 - `auto_paste`: insere o resultado no campo capturado;
 - `use_llm_rewriter`: habilita reescrita opcional — desligada por padrão.
 
@@ -258,8 +262,9 @@ Os módulos principais estão documentados no próprio código. Consulte
 
 ```powershell
 .\build.ps1                    # pasta portátil, perfil CPU
-.\build.ps1 -Cuda              # pasta portátil, perfil CUDA
-.\build.ps1 -Installer         # pasta portátil + instalador CPU
+.\build.ps1 -Cuda              # pasta portátil adaptativa CPU/CUDA
+.\build.ps1 -Cuda -Installer   # instalador universal recomendado para distribuição
+.\build.ps1 -Installer         # instalador menor, somente CPU
 ```
 
 O build usa os lockfiles reproduzíveis dentro de uma `.venv-build` isolada e gera
@@ -276,9 +281,9 @@ instalador, calcula os hashes SHA-256 e anexa os três arquivos à GitHub Releas
 - **A bandeja não aparece:** confira o menu de ícones ocultos do Windows e o
   `%LOCALAPPDATA%\QuantumScribe\app.log`.
 - **Atalho não responde:** verifique se outro programa registrou a mesma combinação.
-- **Primeiro ditado demora:** o modelo está sendo carregado em RAM/VRAM sob demanda.
+- **Primeiro ditado demora:** aguarde o download inicial e a carga do modelo em RAM/VRAM; as próximas transcrições reutilizam o modelo.
 - **CUDA falha:** atualize o driver ou selecione CPU com `compute_type=int8`.
-- **Modelo não baixa:** confira conexão, espaço livre e permissões da pasta local.
+- **Modelo não baixa:** confira conexão, cerca de 2 GB livres e permissões da pasta local; ao reabrir, o download continua de onde parou.
 - **Texto não é colado:** confirme que o campo original ainda existe e que
   `auto_paste` está habilitado.
 

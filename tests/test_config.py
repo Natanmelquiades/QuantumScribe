@@ -13,8 +13,11 @@ def test_load_default_config(temp_appdata):
     # Sem arquivo existente, deve carregar o padrão
     config = load_config()
     assert isinstance(config, AppConfig)
-    assert config.model == "small"
+    assert config.model == "medium"
+    assert config.effective_model == "medium"
     assert config.language == "pt"
+    assert config.device == "auto"
+    assert config.compute_type == "auto"
     # ai_mode deve vir como False agora por padrão
     assert config.ai_mode is False
 
@@ -28,10 +31,10 @@ def test_save_and_reload(temp_appdata):
     reloaded = load_config()
     assert reloaded.language == "en"
     assert reloaded.device == "cuda"
-    # effective_model deve ser recalculado (como o modelo cuda não existe, recua para small)
-    assert reloaded.effective_model == "small"
+    assert reloaded.effective_model == "medium"
+    assert reloaded.auto_download_model is True
 
-def test_model_fallback_preserves_preference(temp_appdata):
+def test_missing_model_preserves_preference_for_automatic_download(temp_appdata):
     config = load_config()
     config.model = "medium"
     save_config(config)
@@ -39,8 +42,21 @@ def test_model_fallback_preserves_preference(temp_appdata):
     reloaded = load_config()
     # A preferência (model) deve continuar sendo "medium"
     assert reloaded.model == "medium"
-    # Mas como o modelo "medium" não está baixado na pasta temporária, effective_model deve ser "small"
-    assert reloaded.effective_model == "small"
+    # Mesmo ausente, ele permanece efetivo para ser baixado/retomado automaticamente.
+    assert reloaded.effective_model == "medium"
+
+
+def test_corrupt_config_is_repaired_with_safe_defaults(temp_appdata):
+    config_file = temp_appdata / "QuantumScribe" / "config.json"
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text("{inválido", encoding="utf-8")
+
+    config = load_config()
+
+    assert config.model == "medium"
+    assert config.device == "auto"
+    assert config.compute_type == "auto"
+    assert '"model": "medium"' in config_file.read_text(encoding="utf-8")
 
 
 def test_partial_model_snapshot_is_not_treated_as_downloaded(temp_appdata):

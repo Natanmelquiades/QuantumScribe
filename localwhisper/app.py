@@ -162,6 +162,10 @@ class QuantumScribeApp:
     def run(self) -> None:
         """Inicia a aplicação executando os loops de escuta e o loop principal do Tkinter."""
         self.tray.start()
+        # Primeira execução: instala o modelo padrão em segundo plano. A bandeja
+        # permanece responsiva e o primeiro ditado aguarda o mesmo download, se preciso.
+        if getattr(self.config, "auto_download_model", True):
+            threading.Thread(target=self._prepare_model_download, daemon=True).start()
         # O CTranslate2 pode reservar vários GB e competir com o loop da bandeja
         # durante a carga. Por padrão o modelo é carregado somente após o primeiro
         # ditado; quem preferir aquecimento antecipado pode habilitar a opção no JSON.
@@ -466,13 +470,10 @@ class QuantumScribeApp:
                                     # O HUD mostra "Reescrevendo..." durante o processamento do LLM
                                     self.root.after(0, lambda: self.popup.set_text("Reescrevendo...", "IA Ativada"))
 
-                                    device = "cpu" if self.config.device == "auto" else self.config.device
-                                    compute_type = self.config.compute_type
-                                    if compute_type == "auto":
-                                        if device == "cpu":
-                                            compute_type = "int8"
-                                        else:
-                                            compute_type = "float16"
+                                    from .hardware import resolve_hardware
+                                    hardware = resolve_hardware(self.config.device, self.config.compute_type)
+                                    device = hardware.device
+                                    compute_type = hardware.compute_type
 
                                     # Executa com watchdog de 15s para evitar congelamento
                                     import concurrent.futures
@@ -583,22 +584,7 @@ class QuantumScribeApp:
         """Instancia o modelo na inicialização para evitar gargalo de carregamento."""
         import logging
 
-        from .config import is_model_downloaded
         logger = logging.getLogger(__name__)
-
-        model_name = (
-            getattr(self.config, "effective_model", "")
-            or getattr(self.config, "model", "small")
-        )
-        if not is_model_downloaded(model_name):
-            try:
-                self.tray.icon.title = (
-                    f"Quantum Scribe — Modelo '{model_name}' não baixado. "
-                    "Configure o modelo nas preferências."
-                )
-            except Exception:
-                pass
-            return
 
         try:
             self.transcriber.load()
@@ -610,13 +596,10 @@ class QuantumScribeApp:
                 repo = self.config.llm_model_repo
                 if is_rewriter_downloaded(repo):
                     # Resolve o hardware e precisão dinâmicos
-                    device = "cpu" if self.config.device == "auto" else self.config.device
-                    compute_type = self.config.compute_type
-                    if compute_type == "auto":
-                        if device == "cpu":
-                            compute_type = "int8"
-                        else:
-                            compute_type = "float16"
+                    from .hardware import resolve_hardware
+                    hardware = resolve_hardware(self.config.device, self.config.compute_type)
+                    device = hardware.device
+                    compute_type = hardware.compute_type
                     _load_rewriter(repo, device=device, compute_type=compute_type)
         except Exception:
             pass
@@ -625,6 +608,33 @@ class QuantumScribeApp:
             try:
                 from .stream_transcriber import _create_best_vad
                 _create_best_vad()  # Carrega o modelo torch na memória
+            except Exception:
+                pass
+
+    def _prepare_model_download(self) -> None:
+        """Baixa o modelo escolhido sem ocupar CPU/GPU carregando-o na memória."""
+        from .config import is_model_downloaded
+        from .model_manager import ensure_model_downloaded
+
+        model_name = getattr(self.config, "effective_model", "") or self.config.model
+        if is_model_downloaded(model_name):
+            return
+        try:
+            self.tray.icon.title = f"Quantum Scribe — Baixando modelo {model_name}..."
+        except Exception:
+            pass
+        try:
+            ensure_model_downloaded(model_name)
+            try:
+                self.tray.icon.title = "Quantum Scribe — Pronto para ditar"
+            except Exception:
+                pass
+        except Exception as error:
+            import logging
+
+            logging.getLogger(__name__).warning("[Modelo] Download automático falhou: %s", error)
+            try:
+                self.tray.icon.title = "Quantum Scribe — Download pendente; clique para tentar novamente"
             except Exception:
                 pass
 
@@ -750,6 +760,7 @@ class QuantumScribeApp:
 
     def save_and_apply_config(self, new_config: AppConfig) -> None:
         """Salva a nova configuração em disco e aplica dinamicamente na execução."""
+        new_config.effective_model = new_config.model
         save_config(new_config)
 
         # Verifica se as hotkeys mudaram
@@ -768,6 +779,8 @@ class QuantumScribeApp:
             self._register_all_hotkeys()
 
         self.transcriber.reload_config(new_config)
+        if getattr(new_config, "auto_download_model", True):
+            threading.Thread(target=self._prepare_model_download, daemon=True).start()
 
     def exit(self) -> None:
         """Desregistra recursos do sistema e encerra o processo de forma limpa."""
