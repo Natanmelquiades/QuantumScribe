@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
-$BuildVenv = ".venv-build"
+$BuildVenv = ".venv-build-core"
 $BuildPython = Join-Path $BuildVenv "Scripts\python.exe"
 
 if (-not (Test-Path $BuildPython)) {
@@ -18,9 +18,13 @@ if (-not (Test-Path $BuildPython)) {
     }
 }
 
-$RequirementsFile = if ($Cuda) { "requirements-cuda.lock" } else { "requirements-cpu.lock" }
+if ($Cuda) {
+    throw "O CUDA não faz mais parte do Core. Use scripts\build_optional_components.ps1 para gerar o componente sob demanda."
+}
+
+$RequirementsFile = "requirements-build.lock"
 Write-Host "Instalando dependências reproduzíveis de $RequirementsFile..."
-& $BuildPython -m pip install -r $RequirementsFile
+& $BuildPython -m pip install --require-hashes -r $RequirementsFile
 if ($LASTEXITCODE -ne 0) {
     throw "Falha ao instalar as dependências de build."
 }
@@ -35,22 +39,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Falha ao gerar o executável com PyInstaller."
 }
 
-if ($Cuda) {
-    $RequiredCudaDlls = @(
-        "dist\QuantumScribe\_internal\nvidia\cublas\bin\cublas64_12.dll",
-        "dist\QuantumScribe\_internal\nvidia\cublas\bin\cublasLt64_12.dll",
-        "dist\QuantumScribe\_internal\nvidia\cudnn\bin\cudnn64_9.dll"
-    )
-    $MissingCudaDlls = @($RequiredCudaDlls | Where-Object { -not (Test-Path $_) })
-    if ($MissingCudaDlls.Count -gt 0) {
-        throw "Build CUDA incompleto. DLLs ausentes: $($MissingCudaDlls -join ', ')"
-    }
-    Write-Host "Runtime CUDA incluído; o aplicativo usará CPU automaticamente em hardware incompatível."
-}
-
 Write-Host ""
-$BuildProfile = if ($Cuda) { "adaptativo CPU/CUDA" } else { "somente CPU" }
-Write-Host "Executável criado em: dist\QuantumScribe\QuantumScribe.exe ($BuildProfile)"
+Write-Host "Executável criado em: dist\QuantumScribe\QuantumScribe.exe (Core CPU; GPU automática sob demanda)"
 
 if ($Installer) {
     $BundleBytes = (Get-ChildItem "dist\QuantumScribe" -Recurse -File | Measure-Object Length -Sum).Sum
@@ -73,6 +63,11 @@ if ($Installer) {
         $VersionParts += 0
     }
     $WindowsVersion = $VersionParts -join '.'
+
+    & $BuildPython scripts\generate_nsis_uninstall_manifest.py
+    if ($LASTEXITCODE -ne 0) {
+        throw "Falha ao gerar a lista segura de desinstalação."
+    }
 
     $NsisCandidates = @(
         (Get-Command makensis.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue),

@@ -1,0 +1,1 @@
+silero-vad==6.2.1 --hash=sha256:09de93c4d874bb19c53e62a47dd38be5f163cedad2b5599583231f2a84ef79cb

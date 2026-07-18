@@ -33,6 +33,13 @@ def setup_cuda_dlls() -> tuple[str, ...]:
     if frozen_root:
         roots.append(Path(frozen_root).resolve())
     roots.append(Path(sys.executable).resolve().parent / "_internal")
+    try:
+        from .components import installed_component_roots
+
+        roots.extend(installed_component_roots(("cuda",)))
+    except Exception:
+        # O Core deve continuar funcionando mesmo se o diretório opcional estiver corrompido.
+        pass
 
     for root in dict.fromkeys(roots):
         nvidia_path = root / "nvidia"
@@ -87,6 +94,11 @@ def cuda_runtime_status() -> tuple[bool, str]:
         return False, f"runtime CUDA indisponível: {error}"
 
     return True, "GPU NVIDIA e runtime CUDA disponíveis"
+
+
+def refresh_hardware_detection() -> None:
+    """Limpa caches após instalar um runtime opcional na sessão atual."""
+    cuda_runtime_status.cache_clear()
 
 
 def _safe_compute_type(device: str, requested: str) -> str:

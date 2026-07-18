@@ -1,10 +1,12 @@
+import sys
 import threading
 import time
+import types
 
 import pytest
 
 from localwhisper.config import is_model_downloaded
-from localwhisper.model_manager import ModelDownloadError, ensure_model_downloaded
+from localwhisper.model_manager import MODEL_REVISIONS, ModelDownloadError, ensure_model_downloaded
 
 
 @pytest.fixture
@@ -37,6 +39,25 @@ def test_clean_install_downloads_medium_into_whisper_cache(isolated_appdata):
 
     assert calls == [("medium", str(isolated_appdata))]
     assert is_model_downloaded("medium") is True
+
+
+def test_official_model_download_is_pinned_to_reviewed_revision(isolated_appdata, monkeypatch):
+    captured = {}
+
+    def fake_snapshot_download(**kwargs):
+        captured.update(kwargs)
+        _write_complete_snapshot(isolated_appdata, "medium")
+        return str(isolated_appdata)
+
+    fake_hub = types.ModuleType("huggingface_hub")
+    fake_hub.snapshot_download = fake_snapshot_download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub)
+
+    ensure_model_downloaded("medium")
+
+    assert captured["repo_id"] == "Systran/faster-whisper-medium"
+    assert captured["revision"] == MODEL_REVISIONS["medium"]
+    assert len(captured["revision"]) == 40
 
 
 def test_interrupted_download_is_resumed(isolated_appdata):

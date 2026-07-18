@@ -16,6 +16,10 @@ _current_device = None
 _current_compute_type = None
 _rewriter_lock = threading.Lock()
 _is_downloading = False
+_PINNED_REVISIONS = {
+    "jncraton/Qwen2.5-0.5B-Instruct-ct2-int8": "4c6321ff9d93b9c0d838e4cfa1397eb75cea5ceb",
+    "jncraton/Qwen2.5-3B-Instruct-ct2-int8": "973e5c34c669fe7c461bf2b6840338d16e2c5d8a",
+}
 
 
 def _get_model_path(repo_id: str) -> Path:
@@ -57,10 +61,14 @@ def download_rewriter_model(repo_id: str, callback: Optional[callable] = None) -
 
             from huggingface_hub import snapshot_download
 
+            revision = _PINNED_REVISIONS.get(repo_id)
+            if revision is None:
+                raise ValueError("Repositório de Mini-LLM não aprovado nesta versão do Quantum Scribe")
+
             snapshot_download(
                 repo_id=repo_id,
+                revision=revision,
                 local_dir=str(model_path),
-                local_dir_use_symlinks=False
             )
 
             if callback:

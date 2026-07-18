@@ -24,20 +24,38 @@ def test_windows_packaging_sources_exist():
     assert all(path.is_file() for path in expected)
 
 
-def test_universal_package_collects_cuda_runtime():
+def test_core_explicitly_excludes_heavy_optional_runtimes():
     spec = (ROOT / "QuantumScribe.spec").read_text(encoding="utf-8")
 
-    assert "collect_dynamic_libs" in spec
-    assert "nvidia.cublas" in spec
-    assert "nvidia.cudnn" in spec
-    assert "CUDA_RUNTIME_DLLS" in spec
-    assert "nvidia.cuda_nvrtc" not in spec
+    assert "collect_dynamic_libs" not in spec
+    assert "'torch'" in spec
+    assert "'silero_vad'" in spec
+    assert "'nvidia'" in spec
+    assert "'onnxruntime'" in spec
 
 
-def test_release_build_is_adaptive_cpu_cuda():
+def test_release_build_separates_core_and_optional_components():
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
-    assert r".\build.ps1 -Cuda -Installer" in release
+    assert r".\build.ps1 -Installer" in release
+    assert "build_optional_components.ps1" in release
+    assert "QuantumScribe-CUDA-" in release
+    assert "QuantumScribe-SileroVAD-" in release
+
+
+def test_backup_feature_is_not_shipped():
+    assert not (ROOT / "localwhisper" / "backup.py").exists()
+    settings = (ROOT / "localwhisper" / "settings_ui.py").read_text(encoding="utf-8")
+    assert "Backup e Restauração" not in settings
+
+
+def test_installer_has_fixed_safe_location_and_no_recursive_root_delete():
+    installer = (ROOT / "installer" / "QuantumScribe.nsi").read_text(encoding="utf-8")
+
+    assert "MUI_PAGE_DIRECTORY" not in installer
+    assert 'InstallDir "$LOCALAPPDATA\\Programs\\${APP_NAME}"' in installer
+    assert 'RMDir /r "$INSTDIR"' not in installer
+    assert ".quantumscribe-install" in installer
 
 
 def test_settings_save_does_not_depend_on_lazy_volume_widget():

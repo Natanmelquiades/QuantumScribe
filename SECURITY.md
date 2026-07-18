@@ -21,6 +21,6 @@ dependem da severidade e da complexidade do problema.
 
 ## Dados sensíveis
 
-Nunca anexe `config.json`, diários, backups, áudios, modelos ou o conteúdo completo
+Nunca anexe `config.json`, diários, áudios, modelos ou o conteúdo completo
 de `%LOCALAPPDATA%\QuantumScribe`. Remova chaves, prompts pessoais, nomes de arquivos
 e transcrições antes de compartilhar evidências.

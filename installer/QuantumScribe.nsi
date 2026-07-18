@@ -21,7 +21,6 @@ Unicode True
 Name "${APP_NAME} ${APP_VERSION}"
 OutFile "..\dist\QuantumScribe-Setup-${APP_VERSION}-Windows-x64.exe"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
-InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 CRCCheck on
@@ -41,14 +40,13 @@ VIAddVersionKey /LANG=1046 "ProductVersion" "${APP_VERSION}"
 !define MUI_ABORTWARNING
 !define MUI_ICON "..\build\QuantumScribe.ico"
 !define MUI_UNICON "..\build\QuantumScribe.ico"
-!define MUI_WELCOMEPAGE_TEXT "Este assistente instala o ${APP_NAME} somente para o usuário atual e adiciona um atalho ao menu Iniciar.$\r$\n$\r$\nNa primeira execução, o modelo Pro será baixado automaticamente (cerca de 1,5 GB)."
+!define MUI_WELCOMEPAGE_TEXT "Este assistente instala somente o Core leve do ${APP_NAME} para o usuário atual.$\r$\n$\r$\nModelos e aceleração NVIDIA só serão baixados depois de uma confirmação explícita no aplicativo."
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Abrir o ${APP_NAME}"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\LICENSE"
 !insertmacro MUI_PAGE_COMPONENTS
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
@@ -63,10 +61,14 @@ Section "${APP_NAME} (obrigatório)" SecMain
   SetShellVarContext current
   SetOutPath "$INSTDIR"
 
-  ; Evita DLLs obsoletas quando uma versão nova remove arquivos do bundle.
-  RMDir /r "$INSTDIR\_internal"
-  Delete "$INSTDIR\${APP_EXE}"
+  ; Remove apenas os arquivos conhecidos do bundle anterior. Arquivos que não
+  ; pertencem ao Quantum Scribe são preservados mesmo dentro da pasta fixa.
+  !include "generated_uninstall_files.nsh"
   File /r "..\dist\QuantumScribe\*.*"
+
+  FileOpen $0 "$INSTDIR\.quantumscribe-install" w
+  FileWrite $0 "${APP_NAME} ${APP_VERSION}$\r$\n"
+  FileClose $0
 
   WriteUninstaller "$INSTDIR\Desinstalar.exe"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}" 0
@@ -112,12 +114,23 @@ FunctionEnd
 
 Section "Uninstall"
   SetShellVarContext current
+  ${If} $INSTDIR != "$LOCALAPPDATA\Programs\${APP_NAME}"
+    MessageBox MB_ICONSTOP|MB_OK "Local de instalação inválido. A desinstalação foi cancelada para proteger seus arquivos." /SD IDOK
+    Abort
+  ${EndIf}
+  IfFileExists "$INSTDIR\.quantumscribe-install" +3 0
+    MessageBox MB_ICONSTOP|MB_OK "Marcador de instalação ausente. Nenhum arquivo foi removido." /SD IDOK
+    Abort
+
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}.lnk"
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
 
   ; Dados em %LOCALAPPDATA%\QuantumScribe ficam preservados intencionalmente.
-  RMDir /r "$INSTDIR"
+  !include "generated_uninstall_files.nsh"
+  Delete "$INSTDIR\.quantumscribe-install"
+  Delete "$INSTDIR\Desinstalar.exe"
+  RMDir "$INSTDIR"
 SectionEnd
 
 Function un.CheckAppRunning

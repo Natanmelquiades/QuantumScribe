@@ -9,6 +9,13 @@ from pathlib import Path
 from .config import is_model_downloaded, model_dir
 
 SUPPORTED_MODELS = frozenset({"tiny", "base", "small", "medium", "large-v3"})
+MODEL_REVISIONS = {
+    "tiny": "d90ca5fe260221311c53c58e660288d3deb8d356",
+    "base": "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66",
+    "small": "536b0662742c02347bc0e980a01041f333bce120",
+    "medium": "08e178d48790749d25932bbc082711ddcfdfbc4f",
+    "large-v3": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+}
 _download_lock = threading.Lock()
 
 
@@ -42,10 +49,22 @@ def ensure_model_downloaded(
 
         try:
             if downloader is None:
-                from faster_whisper import download_model
+                from huggingface_hub import snapshot_download
 
-                downloader = download_model
-            downloader(model_name, cache_dir=str(target))
+                snapshot_download(
+                    repo_id=f"Systran/faster-whisper-{model_name}",
+                    revision=MODEL_REVISIONS[model_name],
+                    cache_dir=str(target),
+                    allow_patterns=(
+                        "config.json",
+                        "model.bin",
+                        "tokenizer.json",
+                        "vocabulary.*",
+                        "preprocessor_config.json",
+                    ),
+                )
+            else:
+                downloader(model_name, cache_dir=str(target))
         except Exception as error:
             raise ModelDownloadError(
                 "Não foi possível baixar o modelo. Verifique a internet e o espaço "

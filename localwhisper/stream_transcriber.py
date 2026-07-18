@@ -12,7 +12,7 @@ Implementa transcrição contínua e em paralelo com as seguintes característic
         - Silero VAD (principal): modelo neural leve, altamente preciso mesmo com
           ruído de fundo, voz baixa ou microfone barato.
         - Energy VAD (fallback): baseado em RMS, sem dependências extras.
-          Ativado automaticamente se silero-vad ou torch não estiverem instalados.
+          Ativado automaticamente enquanto o componente Silero não está instalado.
 
     Pipeline de qualidade:
         - Áudio aprimorado via AudioEnhancer antes de enviar ao Whisper
@@ -80,27 +80,32 @@ OVERLAP_SAMPLES: int = int(SAMPLE_RATE * 0.3)
 # ===========================================================================
 
 class _SileroVAD:
-    """Wrapper para o modelo Silero VAD via torch.
+    """Silero VAD v5 via ONNX Runtime, sem carregar o PyTorch.
 
-    Requer: pip install silero-vad  (puxa torch automaticamente)
-    Modelo: ~2MB, CPU muito rápido (~0.5ms por frame de 32ms)
+    O modelo neural é o mesmo da distribuição oficial do Silero. Apenas o
+    adaptador tensorial foi trocado por NumPy para evitar centenas de MB de
+    dependências que não alteravam a qualidade da detecção.
     """
 
     def __init__(self, min_silence_ms: int = MIN_SILENCE_MS) -> None:
-        # Importação lazy para não crashar se torch não estiver instalado
-        import torch
-        from silero_vad import VADIterator, load_silero_vad
+        from .components import component_dir, component_installed
 
-        self._torch = torch
-        model = load_silero_vad()
-        self._vad = VADIterator(
-            model,
-            threshold=0.5,
-            sampling_rate=SAMPLE_RATE,
-            min_silence_duration_ms=min_silence_ms,
-            speech_pad_ms=80,  # Padding para não cortar sílabas finais
+        if not component_installed("silero_vad"):
+            raise RuntimeError("componente Silero VAD ainda não instalado")
+        import onnxruntime as ort
+
+        options = ort.SessionOptions()
+        options.inter_op_num_threads = 1
+        options.intra_op_num_threads = 1
+        self._session = ort.InferenceSession(
+            str(component_dir("silero_vad") / "silero_vad.onnx"),
+            providers=["CPUExecutionProvider"],
+            sess_options=options,
         )
-        self._sample_cursor: int = 0
+        self._threshold = 0.5
+        self._min_silence_samples = SAMPLE_RATE * min_silence_ms / 1000
+        self._speech_pad_samples = SAMPLE_RATE * 80 / 1000
+        self.reset()
 
     def process_frame(self, frame_int16: np.ndarray) -> dict | None:
         """Processa um frame de 512 amostras.
@@ -113,13 +118,41 @@ class _SileroVAD:
             {'end': seconds} quando speech termina,
             None se sem mudança de estado.
         """
-        tensor = self._torch.from_numpy(frame_int16.astype(np.float32) / 32768.0)
+        if len(frame_int16) != VAD_FRAME_SAMPLES:
+            raise ValueError(f"Silero VAD requer {VAD_FRAME_SAMPLES} amostras por frame")
+        frame = (frame_int16.astype(np.float32) / 32768.0).reshape(1, -1)
+        combined = np.concatenate((self._context, frame), axis=1)
+        outputs = self._session.run(
+            None,
+            {"input": combined, "state": self._state, "sr": np.array(SAMPLE_RATE, dtype=np.int64)},
+        )
+        probability = float(np.asarray(outputs[0]).reshape(-1)[0])
+        self._state = np.asarray(outputs[1], dtype=np.float32)
+        self._context = combined[:, -64:]
         self._sample_cursor += len(frame_int16)
-        return self._vad(tensor, return_seconds=True)
+
+        if probability >= self._threshold and self._temporary_end:
+            self._temporary_end = 0
+        if probability >= self._threshold and not self._triggered:
+            self._triggered = True
+            start = max(0, self._sample_cursor - self._speech_pad_samples - len(frame_int16))
+            return {"start": round(start / SAMPLE_RATE, 1)}
+        if probability < self._threshold - 0.15 and self._triggered:
+            if not self._temporary_end:
+                self._temporary_end = self._sample_cursor
+            if self._sample_cursor - self._temporary_end >= self._min_silence_samples:
+                end = self._temporary_end + self._speech_pad_samples - len(frame_int16)
+                self._temporary_end = 0
+                self._triggered = False
+                return {"end": round(end / SAMPLE_RATE, 1)}
+        return None
 
     def reset(self) -> None:
         """Reinicia o estado interno do VAD (para nova sessão)."""
-        self._vad.reset_states()
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, 64), dtype=np.float32)
+        self._triggered = False
+        self._temporary_end = 0
         self._sample_cursor = 0
 
 
@@ -191,8 +224,8 @@ class _EnergyVAD:
 def _create_best_vad(min_silence_ms: int = MIN_SILENCE_MS) -> _SileroVAD | _EnergyVAD:
     """Instancia o melhor VAD disponível.
 
-    Tenta Silero VAD primeiro (melhor qualidade). Se torch/silero-vad não
-    estiverem instalados, usa o EnergyVAD como fallback transparente.
+    Tenta Silero VAD primeiro (melhor qualidade). Se o componente opcional
+    ainda não estiver instalado, usa o EnergyVAD como fallback transparente.
 
     Returns:
         Instância de VAD pronta para uso.
@@ -210,12 +243,14 @@ def _create_best_vad(min_silence_ms: int = MIN_SILENCE_MS) -> _SileroVAD | _Ener
 
 
 def is_silero_available() -> bool:
-    """Verifica se silero-vad e torch estão instalados."""
+    """Verifica se o modelo Silero opcional e o runtime ONNX estão prontos."""
     try:
-        import torch  # noqa: F401
-        from silero_vad import load_silero_vad  # noqa: F401
-        return True
-    except ImportError:
+        import onnxruntime  # noqa: F401
+
+        from .components import component_installed
+
+        return component_installed("silero_vad")
+    except (ImportError, OSError, ValueError):
         return False
 
 
