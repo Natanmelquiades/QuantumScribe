@@ -18,10 +18,18 @@ from typing import Callable
 
 from PIL import Image, ImageDraw, ImageTk
 
-from .backup import create_backup, delete_backup, get_project_root, list_backups, restore_backup
 from .config import AppConfig, is_model_downloaded
 from .diary import diary_dir
 from .hotkey import _parse_hotkey
+
+
+def get_project_root() -> Path:
+    """Retorna a pasta do aplicativo sem depender do recurso removido de backup."""
+    import sys
+
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
 
 
 def load_or_generate_icon() -> Image.Image:
@@ -268,8 +276,6 @@ class SettingsWindow(tk.Toplevel):
 
         # Inicialização das variáveis do Design System
         self._atom_color_val = getattr(self.current_config, "atom_color", "#FF6000")
-        self.code_only_var = tk.BooleanVar(value=True)
-
         # Variáveis Tkinter
         self.paste_var = tk.BooleanVar(value=self.current_config.auto_paste)
         self.sounds_var = tk.BooleanVar(value=self.current_config.play_sounds)
@@ -651,7 +657,6 @@ class SettingsWindow(tk.Toplevel):
 
         if section_id == "system_notes":
             self._refresh_transcriptions_list()
-            self._refresh_backups_list()
             self._update_quantum_brain_stats()
 
     def _build_header(self, parent: tk.Frame, title: str, desc: str) -> None:
@@ -707,8 +712,12 @@ class SettingsWindow(tk.Toplevel):
         self.lang_combo = ModernDropdown(row_lang, variable=self.lang_friendly_var, values=list(self._lang_friendly_map.keys()), width=22)
         self.lang_combo.grid(row=0, column=1, sticky="e", padx=10)
 
-        row_device = self._create_card_row(card_whisper, "Hardware", "Processador utilizado para rodar a transcrição (CPU ou GPU CUDA).")
-        self.device_combo = ModernDropdown(row_device, variable=self.device_var, values=["cpu", "cuda", "auto"], width=15)
+        row_device = self._create_card_row(
+            card_whisper,
+            "Hardware",
+            "Automático prioriza GPU NVIDIA e recua para CPU; CPU força o modo econômico.",
+        )
+        self.device_combo = ModernDropdown(row_device, variable=self.device_var, values=["auto", "cpu"], width=15)
         self.device_combo.grid(row=0, column=1, sticky="e", padx=10)
 
         row_compute = self._create_card_row(card_whisper, "Precisão (Quantização)", "Tipo de precisão matemática das operações.")
@@ -855,11 +864,10 @@ class SettingsWindow(tk.Toplevel):
         lbl_status.pack(fill="x", pady=(0, 10))
 
         row_vad = self._create_card_row(card_audio, "Detecção de Fala (VAD)", "Identifica pausas naturais na voz para segmentar chunks de fala.")
-        silero_ok = (
-            importlib.util.find_spec("torch") is not None
-            and importlib.util.find_spec("silero_vad") is not None
-        )
-        vad_text = "✓ Silero VAD (alta qualidade)" if silero_ok else "⚠ Energy VAD (fallback básico)"
+        from .stream_transcriber import is_silero_available
+
+        silero_ok = is_silero_available()
+        vad_text = "✓ Silero VAD neural (alta qualidade)" if silero_ok else "⚠ Silero será instalado ao ativar o modo contínuo"
         vad_color = SUCCESS_COLOR if silero_ok else "#f0a500"
         tk.Label(row_vad, text=vad_text, font=("Segoe UI Bold", 8), fg=vad_color, bg=CARD_BG).grid(row=0, column=1, sticky="e", padx=10)
 
@@ -995,9 +1003,7 @@ class SettingsWindow(tk.Toplevel):
     # ------------------ PAINEL 3: SISTEMA & NOTAS ------------------
     def _build_system_notes_panel(self, parent: tk.Widget) -> tk.Frame:
         frame = tk.Frame(parent, bg=BG_COLOR)
-        self._build_header(frame, "Sistema, Notas & Backups", "Ajustes do Quantum Brain, backups de segurança e histórico de transcrições.")
-
-        self.code_only_var = tk.BooleanVar(value=True)
+        self._build_header(frame, "Sistema & Notas", "Ajustes do Quantum Brain e histórico local de transcrições.")
 
         # --- Card 1: Quantum Brain ---
         card_brain = self._create_card(frame, "Segundo Cérebro (Quantum Brain)")
@@ -1088,79 +1094,6 @@ class SettingsWindow(tk.Toplevel):
             relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._delete_all_transcriptions
         )
         delete_logs_btn.grid(row=0, column=1, sticky="e", padx=10)
-
-        # --- Card 3: Backup & Restauração ---
-        card_backup = self._create_card(frame, "Backup e Restauração")
-
-        row_backup_actions = self._create_card_row(card_backup, "Ferramentas de Backup", "Gere novos backups zip ou selecione arquivos locais.")
-
-        backup_ctrl_frame = tk.Frame(row_backup_actions, bg=CARD_BG)
-        backup_ctrl_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.chk_code_only = tk.Checkbutton(
-            backup_ctrl_frame, text="Apenas Código",
-            variable=self.code_only_var, bg=CARD_BG, fg=TEXT_COLOR,
-            activebackground=CARD_BG, activeforeground=TEXT_COLOR,
-            selectcolor=INPUT_BG, font=("Segoe UI", 9)
-        )
-        self.chk_code_only.pack(side="left", padx=(0, 10))
-
-        self.btn_create_backup = tk.Button(
-            backup_ctrl_frame, text="Criar Backup 💾", bg=ACCENT_COLOR, fg="#ffffff",
-            activebackground=ACCENT_HOVER, activeforeground="#ffffff", font=("Segoe UI Bold", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._on_create_backup_clicked
-        )
-        self.btn_create_backup.pack(side="left", padx=(0, 5))
-
-        self.btn_restore_file = tk.Button(
-            backup_ctrl_frame, text="Restaurar de Arquivo... 📂", bg=CANCEL_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI Semibold", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._on_restore_file_clicked
-        )
-        self.btn_restore_file.pack(side="left")
-
-        table_frame = tk.Frame(card_backup, bg=INPUT_BG, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        table_frame.pack(fill="x", padx=15, pady=(5, 10))
-
-        columns = ("filename", "type", "version", "datetime", "size")
-        self.backup_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=4)
-        self.backup_tree.heading("filename", text="Arquivo")
-        self.backup_tree.heading("type", text="Tipo")
-        self.backup_tree.heading("version", text="Versão")
-        self.backup_tree.heading("datetime", text="Data/Hora")
-        self.backup_tree.heading("size", text="Tamanho")
-
-        self.backup_tree.column("filename", width=150, minwidth=100)
-        self.backup_tree.column("type", width=90, minwidth=70, anchor="center")
-        self.backup_tree.column("version", width=60, minwidth=40, anchor="center")
-        self.backup_tree.column("datetime", width=120, minwidth=90, anchor="center")
-        self.backup_tree.column("size", width=70, minwidth=50, anchor="e")
-
-        scrollbar_bk = ttk.Scrollbar(table_frame, orient="vertical", command=self.backup_tree.yview)
-        self.backup_tree.configure(yscrollcommand=scrollbar_bk.set)
-
-        self.backup_tree.pack(side="left", fill="both", expand=True)
-        scrollbar_bk.pack(side="right", fill="y")
-
-        row_backup_table_ctrl = self._create_card_row(card_backup, "Ações de Backup Selecionado", "Gerencie o backup atualmente selecionado na tabela acima.")
-
-        backup_table_ctrl_frame = tk.Frame(row_backup_table_ctrl, bg=CARD_BG)
-        backup_table_ctrl_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.btn_restore_selected = tk.Button(
-            backup_table_ctrl_frame, text="Restaurar Selecionado 🔄", bg=CANCEL_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI Semibold", 8),
-            relief="flat", bd=0, padx=12, pady=5, cursor="hand2", command=self._on_restore_selected_clicked
-        )
-        self.btn_restore_selected.pack(side="left", padx=(0, 5))
-
-        self.btn_delete_selected = tk.Button(
-            backup_table_ctrl_frame, text="Excluir Selecionado 🗑", bg=CANCEL_BG, fg=DANGER_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=DANGER_COLOR, font=("Segoe UI Semibold", 8),
-            relief="flat", bd=0, padx=12, pady=5, cursor="hand2", command=self._on_delete_selected_clicked
-        )
-        self.btn_delete_selected.pack(side="left")
-        self._backup_items_map = {}
 
         return frame
 
@@ -1637,154 +1570,6 @@ class SettingsWindow(tk.Toplevel):
         except Exception as e:
             self.stats_label.configure(text=f"Erro ao ler estatísticas: {e}")
 
-    def _refresh_backups_list(self) -> None:
-        if not hasattr(self, "backup_tree") or self.backup_tree is None:
-            return
-        self.backup_tree.delete(*self.backup_tree.get_children())
-        self._backup_items_map.clear()
-
-        try:
-            backups = list_backups()
-            if not backups:
-                self.backup_tree.insert("", "end", values=("Nenhum backup encontrado.", "-", "-", "-", "-"))
-            else:
-                for b in backups:
-                    item_id = self.backup_tree.insert("", "end", values=(
-                        b["filename"],
-                        "Apenas Código" if b["code_only"] else "Completo",
-                        b["version"],
-                        b["datetime"],
-                        f"{b['size_kb']:.1f} KB"
-                    ))
-                    self._backup_items_map[item_id] = b
-        except Exception as e:
-            messagebox.showerror("Erro ao Listar", f"Não foi possível listar os backups: {e}", parent=self)
-
-    def _on_create_backup_clicked(self) -> None:
-        self.btn_create_backup.configure(state="disabled", text="Criando...")
-        self.update()
-
-        try:
-            code_only = self.code_only_var.get()
-            zip_path, elapsed, size = create_backup(code_only=code_only)
-            size_mb = size / (1024 * 1024)
-            type_str = "Apenas Código" if code_only else "Completo"
-            messagebox.showinfo(
-                "Backup Concluído",
-                f"Backup ({type_str}) criado com sucesso!\n\n"
-                f"Arquivo: {zip_path.name}\n"
-                f"Tamanho: {size_mb:.2f} MB ({size / 1024:.1f} KB)\n"
-                f"Tempo decorrido: {elapsed:.2f}s",
-                parent=self
-            )
-        except Exception as e:
-            messagebox.showerror("Erro no Backup", f"Erro ao gerar backup: {e}", parent=self)
-        finally:
-            self.btn_create_backup.configure(state="normal", text="Criar Backup 💾")
-            self._refresh_backups_list()
-
-    def _on_restore_file_clicked(self) -> None:
-        from tkinter import filedialog
-
-        file_path_str = filedialog.askopenfilename(
-            initialdir=str(Path(get_project_root()) / "backups"),
-            title="Selecionar Backup para Restaurar",
-            filetypes=[("Arquivos Zip", "*.zip")],
-            parent=self
-        )
-        if not file_path_str:
-            return
-
-        zip_path = Path(file_path_str)
-        if not zip_path.exists():
-            return
-
-        is_code = zip_path.name.endswith("_code.zip")
-        type_desc = "apenas os arquivos de código" if is_code else "o código E as configurações pessoais"
-
-        confirm = messagebox.askyesno(
-            "Confirmar Restauração",
-            f"Tem certeza que deseja restaurar {type_desc} do backup '{zip_path.name}'?\n\n"
-            "Isso substituirá os arquivos antigos do aplicativo.\n"
-            "O aplicativo deve ser reiniciado após a restauração.",
-            parent=self
-        )
-        if not confirm:
-            return
-
-        try:
-            restore_backup(zip_path)
-            messagebox.showinfo(
-                "Restauração Concluída",
-                "Backup restaurado com sucesso!\n\n"
-                "Por favor, feche e abra o Quantum Scribe novamente para carregar as novas configurações e código.",
-                parent=self
-            )
-        except Exception as e:
-            messagebox.showerror("Erro na Restauração", f"Falha ao restaurar o backup: {e}", parent=self)
-
-    def _on_restore_selected_clicked(self) -> None:
-        selected_item = self.backup_tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Aviso", "Selecione um backup na lista para restaurar.", parent=self)
-            return
-
-        item_id = selected_item[0]
-        backup_data = self._backup_items_map.get(item_id)
-        if not backup_data:
-            return
-
-        zip_path = backup_data["path"]
-        is_code = zip_path.name.endswith("_code.zip")
-        type_desc = "apenas os arquivos de código" if is_code else "o código E as configurações pessoais"
-
-        confirm = messagebox.askyesno(
-            "Confirmar Restauração",
-            f"Tem certeza que deseja restaurar {type_desc} do backup '{zip_path.name}'?\n\n"
-            "Isso substituirá os arquivos antigos do aplicativo.\n"
-            "O aplicativo deve ser reiniciado após a restauração.",
-            parent=self
-        )
-        if not confirm:
-            return
-
-        try:
-            restore_backup(zip_path)
-            messagebox.showinfo(
-                "Restauração Concluída",
-                "Backup restaurado com sucesso!\n\n"
-                "Por favor, feche e abra o Quantum Scribe novamente para carregar as novas configurações e código.",
-                parent=self
-            )
-        except Exception as e:
-            messagebox.showerror("Erro na Restauração", f"Falha ao restaurar o backup: {e}", parent=self)
-
-    def _on_delete_selected_clicked(self) -> None:
-        selected_item = self.backup_tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Aviso", "Selecione um backup na lista para excluir.", parent=self)
-            return
-
-        item_id = selected_item[0]
-        backup_data = self._backup_items_map.get(item_id)
-        if not backup_data:
-            return
-
-        zip_path = backup_data["path"]
-        confirm = messagebox.askyesno(
-            "Confirmar Exclusão",
-            f"Tem certeza que deseja excluir permanentemente o arquivo de backup '{zip_path.name}'?",
-            parent=self
-        )
-        if not confirm:
-            return
-
-        try:
-            delete_backup(zip_path)
-            self._refresh_backups_list()
-        except Exception as e:
-            messagebox.showerror("Erro ao Excluir", f"Falha ao excluir o backup: {e}", parent=self)
-
     # ------------------ FOOTER & SALVAR ------------------
     def _build_footer(self) -> None:
         footer_frame = tk.Frame(self.content_frame, bg=BG_COLOR)
@@ -1851,7 +1636,7 @@ class SettingsWindow(tk.Toplevel):
             device=self.device_var.get(),
             compute_type=self.compute_var.get(),
             preload_model=getattr(self.current_config, "preload_model", False),
-            auto_download_model=getattr(self.current_config, "auto_download_model", True),
+            auto_download_model=False,
             audio_device=mic_selected,
             auto_paste=self.paste_var.get(),
             hotkey=hotkey_normal,

@@ -23,7 +23,7 @@ python -m venv .venv
 
 - mantenha mudanças pequenas e focadas;
 - inclua testes para correções e novas regras de transcrição;
-- não inclua modelos, builds, backups, áudios ou dados de usuário;
+- não inclua modelos, builds, áudios ou dados de usuário;
 - preserve o modo literal: pontuação não pode trocar as palavras ditadas;
 - descreva impacto, validação e eventuais limitações no pull request.
 

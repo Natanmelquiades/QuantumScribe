@@ -56,8 +56,6 @@ def capture_settings() -> list[Path]:
     from localwhisper.config import AppConfig
 
     settings_ui.diary_dir = lambda: Path(r"C:\QuantumScribeDemo\diary")
-    settings_ui.get_project_root = lambda: Path(r"C:\QuantumScribe")
-    settings_ui.list_backups = lambda: []
 
     root = tk.Tk()
     root.withdraw()
@@ -83,7 +81,7 @@ def capture_settings() -> list[Path]:
     sections = (
         ("dictation_ai", "01-ditado-ia.png"),
         ("preferences", "02-preferencias-atalhos.png"),
-        ("system_notes", "03-sistema-notas-backups.png"),
+        ("system_notes", "03-sistema-notas.png"),
         ("about", "04-sobre.png"),
     )
     for section, filename in sections:

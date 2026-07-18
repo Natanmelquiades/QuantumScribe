@@ -13,41 +13,64 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: |
             requirements-cpu.lock
-            requirements-cuda.lock
-            requirements-test.txt
+            requirements-build.lock
+            requirements-test.lock
+            requirements-cuda-component.txt
+            requirements-vad-component.txt
 
       - name: Install validation dependencies
-        run: python -m pip install -r requirements-test.txt
+        run: python -m pip install --require-hashes -r requirements-test.lock
 
       - name: Validate release candidate
         run: |
           python -m compileall -q main.py localwhisper scripts tests
           python -m ruff check main.py localwhisper scripts tests
           python -m pytest -q
-          python -m pip_audit -r requirements-cpu.lock --no-deps --progress-spinner off
+          python -m pip_audit -r requirements-cpu.lock --no-deps --disable-pip --progress-spinner off
+          python -m pip_audit -r requirements-cuda-component.txt --no-deps --disable-pip --progress-spinner off
+          python -m pip_audit -r requirements-vad-component.txt --no-deps --disable-pip --progress-spinner off
 
       - name: Install NSIS
-        run: choco install nsis --no-progress -y
+        run: choco install nsis --version=3.11.0 --no-progress -y
 
-      - name: Build portable app and installer
+      - name: Build Core and installer
         shell: pwsh
-        run: .\build.ps1 -Cuda -Installer
+        run: .\build.ps1 -Installer
+
+      - name: Assert Core has no heavy optional runtimes
+        shell: pwsh
+        run: |
+          $forbidden = Get-ChildItem dist\QuantumScribe -Recurse -ErrorAction Stop | Where-Object {
+            $_.FullName -match '\\(torch|torchaudio|silero_vad|nvidia)(\\|$)'
+          }
+          if ($forbidden) {
+            $forbidden.FullName | Write-Error
+            throw "O Core contém dependências opcionais pesadas."
+          }
+
+      - name: Build verified optional components
+        shell: pwsh
+        run: .\scripts\build_optional_components.ps1
 
       - name: Create portable ZIP and checksums
         shell: pwsh
         run: |
-          Compress-Archive -Path dist\QuantumScribe\* -DestinationPath QuantumScribe-Windows-x64.zip
+          $version = (Select-String -Path localwhisper\__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $coreZip = "QuantumScribe-Core-$version-Windows-x64.zip"
+          Compress-Archive -Path dist\QuantumScribe\* -DestinationPath $coreZip
           $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
-          $files = @("QuantumScribe-Windows-x64.zip", $installer.FullName)
+          $cuda = Get-ChildItem "dist\QuantumScribe-CUDA-$version-Windows-x64.zip" -File -ErrorAction Stop
+          $vad = Get-ChildItem "dist\QuantumScribe-SileroVAD-$version-Windows-x64.zip" -File -ErrorAction Stop
+          $files = @($coreZip, $installer.FullName, $cuda.FullName, $vad.FullName)
           $lines = foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $(Split-Path $file -Leaf)"
@@ -59,9 +82,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $version = (Select-String -Path localwhisper\__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
           $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
           $tag = "${{ github.ref_name }}"
-          $assets = @("QuantumScribe-Windows-x64.zip", $installer.FullName, "SHA256SUMS.txt")
+          $assets = @(
+            "QuantumScribe-Core-$version-Windows-x64.zip",
+            $installer.FullName,
+            "dist\QuantumScribe-CUDA-$version-Windows-x64.zip",
+            "dist\QuantumScribe-SileroVAD-$version-Windows-x64.zip",
+            "SHA256SUMS.txt"
+          )
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $assets --clobber

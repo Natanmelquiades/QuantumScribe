@@ -1,6 +1,6 @@
 import pytest
 
-from localwhisper.config import AppConfig, is_model_downloaded, load_config, save_config
+from localwhisper.config import AppConfig, is_model_downloaded, load_config, model_snapshot_path, save_config
 
 
 @pytest.fixture
@@ -32,9 +32,9 @@ def test_save_and_reload(temp_appdata):
     assert reloaded.language == "en"
     assert reloaded.device == "cuda"
     assert reloaded.effective_model == "medium"
-    assert reloaded.auto_download_model is True
+    assert reloaded.auto_download_model is False
 
-def test_missing_model_preserves_preference_for_automatic_download(temp_appdata):
+def test_missing_model_preserves_preference_without_silent_download(temp_appdata):
     config = load_config()
     config.model = "medium"
     save_config(config)
@@ -42,8 +42,9 @@ def test_missing_model_preserves_preference_for_automatic_download(temp_appdata)
     reloaded = load_config()
     # A preferência (model) deve continuar sendo "medium"
     assert reloaded.model == "medium"
-    # Mesmo ausente, ele permanece efetivo para ser baixado/retomado automaticamente.
+    # Mesmo ausente, permanece efetivo para o download explícito nas configurações.
     assert reloaded.effective_model == "medium"
+    assert reloaded.auto_download_model is False
 
 
 def test_corrupt_config_is_repaired_with_safe_defaults(temp_appdata):
@@ -82,3 +83,4 @@ def test_complete_model_snapshot_is_detected(temp_appdata):
         (snapshot / filename).write_bytes(b"ready")
 
     assert is_model_downloaded("small") is True
+    assert model_snapshot_path("small") == snapshot
