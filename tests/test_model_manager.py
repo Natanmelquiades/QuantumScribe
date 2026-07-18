@@ -1,5 +1,7 @@
+import sys
 import threading
 import time
+import types
 
 import pytest
 
@@ -47,7 +49,9 @@ def test_official_model_download_is_pinned_to_reviewed_revision(isolated_appdata
         _write_complete_snapshot(isolated_appdata, "medium")
         return str(isolated_appdata)
 
-    monkeypatch.setattr("huggingface_hub.snapshot_download", fake_snapshot_download)
+    fake_hub = types.ModuleType("huggingface_hub")
+    fake_hub.snapshot_download = fake_snapshot_download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_hub)
 
     ensure_model_downloaded("medium")
 
