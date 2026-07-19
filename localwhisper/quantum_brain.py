@@ -73,6 +73,13 @@ class QuantumBrainOrchestrator:
                 _orchestrator_instance = cls(config)
             return _orchestrator_instance
 
+    def update_config(self, config: "AppConfig") -> None:
+        """Atualiza a configuração em uso sem reiniciar o orquestrador."""
+        self.config = config
+        self._stop_event.set()
+        self._stop_event = threading.Event()
+        self._start_background_sync()
+
     def add_entry(self, text: str) -> Path:
         """Salva uma nova nota bruta e verifica se deve disparar síntese.
 

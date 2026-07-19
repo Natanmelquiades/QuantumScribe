@@ -24,6 +24,19 @@ def main():
 
         new_content = re.sub(r'__version__\s*=\s*"[^"]+"', f'__version__ = "{new_version}"', content)
         init_path.write_text(new_content, encoding="utf-8")
+
+        pyproject_path = Path(__file__).parent / "pyproject.toml"
+        if pyproject_path.exists():
+            pyproject = pyproject_path.read_text(encoding="utf-8")
+            updated_pyproject, count = re.subn(
+                r'(?m)^(version\s*=\s*)"[^"]+"',
+                rf'\g<1>"{new_version}"',
+                pyproject,
+                count=1,
+            )
+            if count != 1:
+                raise RuntimeError("Versão do pyproject.toml não encontrada.")
+            pyproject_path.write_text(updated_pyproject, encoding="utf-8")
         print(f"Versão incrementada com sucesso: {old_version} -> {new_version}")
     else:
         print(f"Formato de versão inválido: {old_version}")

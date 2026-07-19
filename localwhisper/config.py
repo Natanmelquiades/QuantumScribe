@@ -38,8 +38,10 @@ class AppConfig:
     )
     play_sounds: bool = True       # Reproduz efeitos sonoros ao iniciar e finalizar gravação/transcrição
     sound_volume: float = 0.5      # Volume dos efeitos sonoros (0.0 a 1.0)
-    hud_theme: str = "dots"        # Tema de animação do HUD: "dots" (bolinhas) ou "atom" (átomo)
-    atom_color: str = "#FF6000"    # Cor do átomo no tema "atom" (hex, ex: #FF6000 laranja)
+    hud_theme: str = "atom_centered" # Tema padrão: átomo centralizado e compacto
+    atom_color: str = "#BF5AF2"    # Cor padrão do átomo: violeta Quantum
+    theme_mode: str = "dark"       # Aparência da interface: "dark" (escuro) ou "light" (claro)
+    accent_color: str = "#BF5AF2"  # Cor de destaque da interface; padrão violeta Quantum
     hotkey_translate: str = "Ctrl+Alt+Space"  # Atalho para ditar e traduzir para o inglês
     hotkey_auto_send: str = "Ctrl+Shift+Space"  # Atalho para ditar, colar e enviar automático (Enter)
     audio_device: str = ""         # Nome do dispositivo de entrada de áudio (microfone)

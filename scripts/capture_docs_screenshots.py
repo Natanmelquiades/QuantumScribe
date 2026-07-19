@@ -55,7 +55,18 @@ def capture_settings() -> list[Path]:
     import localwhisper.settings_ui as settings_ui
     from localwhisper.config import AppConfig
 
-    settings_ui.diary_dir = lambda: Path(r"C:\QuantumScribeDemo\diary")
+    demo_diary = Path(os.environ["LOCALAPPDATA"]) / "QuantumScribeDemo" / "diary"
+    demo_diary.mkdir(parents=True, exist_ok=True)
+    (demo_diary / "2026-07-19.md").write_text(
+        "# 2026-07-19\n\n## 09:42\n\nExemplo sanitizado de transcrição.\n\n"
+        "## 14:18\n\nPlanejamento local e privado.\n\n",
+        encoding="utf-8",
+    )
+    (demo_diary / "2026-07-18.md").write_text(
+        "# 2026-07-18\n\n## 16:05\n\nRegistro de demonstração.\n\n",
+        encoding="utf-8",
+    )
+    settings_ui.diary_dir = lambda: demo_diary
     settings_ui.get_project_root = lambda: Path(r"C:\QuantumScribe")
     settings_ui.list_backups = lambda: []
 
@@ -72,8 +83,10 @@ def capture_settings() -> list[Path]:
         punctuation_assist=True,
         continuous_learning=False,
         use_llm_rewriter=False,
-        hud_theme="atom",
-        atom_color="#FF6000",
+        hud_theme="atom_centered",
+        atom_color="#BF5AF2",
+        theme_mode="dark",
+        accent_color="#BF5AF2",
         quantum_brain_enabled=True,
     )
     window = settings_ui.SettingsWindow(root, config, lambda _config: None)
@@ -81,13 +94,17 @@ def capture_settings() -> list[Path]:
 
     captures: list[Path] = []
     sections = (
-        ("dictation_ai", "01-ditado-ia.png"),
-        ("preferences", "02-preferencias-atalhos.png"),
-        ("system_notes", "03-sistema-notas-backups.png"),
-        ("about", "04-sobre.png"),
+        ("appearance", "01-aparencia.png"),
+        ("dictation", "02-ditado.png"),
+        ("ai", "03-inteligencia-artificial.png"),
+        ("audio", "04-microfone-audio.png"),
+        ("shortcuts", "05-atalhos.png"),
+        ("brain", "06-quantum-brain.png"),
+        ("storage", "07-armazenamento.png"),
+        ("about", "08-sobre.png"),
     )
     for section, filename in sections:
-        window._show_section(section)
+        window._show(section, update_sidebar=True)
         window.update()
         captures.append(_capture(window, filename))
 
@@ -126,9 +143,9 @@ def capture_hud() -> list[Path]:
     def capture_state(filename: str, processing: bool) -> Path:
         root = tk.Tk()
         _make_demo_stage(root, "QuantumScribe em ação")
-        config = AppConfig(hud_theme="atom", atom_color="#FF6000")
+        config = AppConfig(hud_theme="atom_centered", atom_color="#BF5AF2")
         popup = Popup(root, lambda: None, get_amplitude=lambda: 0.42, config=config)
-        popup.show_recording(theme="atom", color="#FF6000")
+        popup.show_recording(theme="atom_centered", color="#BF5AF2")
         if processing:
             popup.show_processing_with_progress(2.5)
         else:
@@ -144,8 +161,8 @@ def capture_hud() -> list[Path]:
         return path
 
     return [
-        capture_state("05-hud-gravando.png", processing=False),
-        capture_state("06-hud-processando.png", processing=True),
+        capture_state("09-hud-gravando.png", processing=False),
+        capture_state("10-hud-processando.png", processing=True),
     ]
 
 
@@ -184,7 +201,7 @@ def capture_tray_menu() -> Path:
         ).pack(fill="x", ipady=5)
 
     root.update()
-    path = _capture(root, "07-menu-bandeja.png")
+    path = _capture(root, "11-menu-bandeja.png")
     root.destroy()
     return path
 
@@ -215,7 +232,7 @@ def create_social_preview() -> Path:
     draw.text(
         (370, 310),
         "Ditado por voz local para Windows",
-        fill="#ff7828",
+        fill="#BF5AF2",
         font=font(31, bold=True),
     )
     draw.text(

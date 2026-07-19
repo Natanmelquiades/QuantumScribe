@@ -779,6 +779,16 @@ class QuantumScribeApp:
             self._register_all_hotkeys()
 
         self.transcriber.reload_config(new_config)
+
+        # Sincroniza o singleton do Quantum Brain com a nova configuração,
+        # para que intervalo, limite de notas e toggles passem a valer sem reiniciar.
+        try:
+            from .quantum_brain import _orchestrator_instance
+            if _orchestrator_instance is not None:
+                _orchestrator_instance.update_config(new_config)
+        except Exception:
+            pass
+
         if getattr(new_config, "auto_download_model", True):
             threading.Thread(target=self._prepare_model_download, daemon=True).start()
 

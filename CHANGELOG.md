@@ -4,6 +4,21 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [2.1.29] - 2026-07-19
+
+### Adicionado
+- Redesign completo da tela de Ajustes no estilo Apple: barra lateral com categorias, páginas internas por função e subpáginas com botão "‹ Voltar" (opções dentro de opções).
+- Temas dinâmicos da interface: modo Escuro/Claro e cor de destaque selecionável (violeta padrão, laranja, rosa, azul, verde, amarelo ou cor personalizada), aplicados instantaneamente a todos os componentes.
+- Novo padrão visual para instalações novas: destaque violeta e HUD em Átomo Centralizado.
+- Downloads de modelos (Whisper e Mini-LLM) com barra de progresso percentual real, gradual e monotônica, com bytes baixados/totais — substitui a antiga animação indeterminada que ficava "indo e voltando".
+- Aplicação instantânea de todas as configurações: toggles, cores, modelos e atalhos passam a valer no momento da alteração, sem botão Salvar.
+- Notificações discretas (toasts) confirmando cada ação importante, com comunicação premium e informativa.
+- Novos campos de configuração `theme_mode` e `accent_color`, retrocompatíveis com configurações existentes.
+
+### Corrigido
+- O singleton do Quantum Brain agora recebe a configuração atualizada ao salvar, fazendo intervalo de síntese, limite de notas e toggles valerem sem reiniciar o app.
+- Download do Mini-LLM não depende mais do parâmetro removido `local_dir_use_symlinks` do huggingface_hub 1.x.
+
 ## [2.1.26] - 2026-07-17
 
 ### Adicionado

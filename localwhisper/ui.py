@@ -58,11 +58,11 @@ BG_FILL = (10, 11, 14)      # Fundo interno
 BORDER_FILL = (55, 60, 72)  # Borda
 TEXT_COLOR = "#EBEDF2"  # Texto principal
 MUTED_COLOR = "#7E8491"  # Subtexto
-DOT_COLOR = "#FF6000"  # Bolinhas
+DOT_COLOR = "#BF5AF2"  # Bolinhas
 SUCCESS_COLOR = "#5CFC7C"
 ERROR_COLOR = "#FF647C"
 PROGRESS_BG = "#1e2026"
-PROGRESS_FILL = "#FF6000"
+PROGRESS_FILL = "#BF5AF2"
 DOT_COUNT = 5
 
 # Parâmetros de animação do átomo
@@ -198,7 +198,7 @@ class Popup:
         self.animating = False
         self.smooth_amp = 0.0
         self._active_theme = "dots"
-        self._atom_color = "#FF6000"
+        self._atom_color = "#BF5AF2"
 
         # Progresso
         self._progress_animating = False
@@ -368,7 +368,7 @@ class Popup:
 
     # ------------------------------------------------------------- APIs Públicas
 
-    def show_recording(self, theme: str = "dots", color: str = "#FF6000") -> None:
+    def show_recording(self, theme: str = "atom_centered", color: str = "#BF5AF2") -> None:
         """Exibe o HUD no estado de gravação ativa, aplicando o layout do tema."""
         self._active_theme = theme
         self._atom_color = color

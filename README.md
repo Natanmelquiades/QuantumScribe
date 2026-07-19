@@ -26,7 +26,7 @@ trocar palavras.
 > faster-whisper. It offers global shortcuts, literal transcription, conservative
 > punctuation, auto-paste, optional CUDA acceleration and an offline second brain.
 
-![Painel principal de ditado e IA](docs/assets/screenshots/01-ditado-ia.png)
+![Ajustes de aparência do QuantumScribe](docs/assets/screenshots/01-aparencia.png)
 
 ## Destaques
 
@@ -45,19 +45,27 @@ trocar palavras.
 
 <table>
   <tr>
-    <td><img src="docs/assets/screenshots/01-ditado-ia.png" alt="Configurações de ditado, Whisper e pontuação"></td>
-    <td><img src="docs/assets/screenshots/02-preferencias-atalhos.png" alt="Preferências, atalhos e aparência do HUD"></td>
+    <td><img src="docs/assets/screenshots/01-aparencia.png" alt="Aparência, tema e cor de destaque"></td>
+    <td><img src="docs/assets/screenshots/02-ditado.png" alt="Configurações de ditado, modelo e pontuação"></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/screenshots/03-sistema-notas-backups.png" alt="Configurações do Quantum Brain e backups"></td>
-    <td><img src="docs/assets/screenshots/04-sobre.png" alt="Informações da versão e ambiente do QuantumScribe"></td>
+    <td><img src="docs/assets/screenshots/03-inteligencia-artificial.png" alt="Configurações de inteligência artificial e tons"></td>
+    <td><img src="docs/assets/screenshots/04-microfone-audio.png" alt="Configurações de microfone, áudio e streaming"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/screenshots/05-atalhos.png" alt="Atalhos globais do QuantumScribe"></td>
+    <td><img src="docs/assets/screenshots/06-quantum-brain.png" alt="Configurações do Quantum Brain"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/screenshots/07-armazenamento.png" alt="Histórico de transcrições e backups"></td>
+    <td><img src="docs/assets/screenshots/08-sobre.png" alt="Informações da versão e ambiente do QuantumScribe"></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/assets/screenshots/05-hud-gravando.png" width="31%" alt="HUD do QuantumScribe gravando">
-  <img src="docs/assets/screenshots/06-hud-processando.png" width="31%" alt="HUD do QuantumScribe processando">
-  <img src="docs/assets/screenshots/07-menu-bandeja.png" width="31%" alt="Menu do QuantumScribe na bandeja do Windows">
+  <img src="docs/assets/screenshots/09-hud-gravando.png" width="31%" alt="HUD do QuantumScribe gravando">
+  <img src="docs/assets/screenshots/10-hud-processando.png" width="31%" alt="HUD do QuantumScribe processando">
+  <img src="docs/assets/screenshots/11-menu-bandeja.png" width="31%" alt="Menu do QuantumScribe na bandeja do Windows">
 </p>
 
 ## Requisitos

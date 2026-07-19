@@ -1,19 +1,29 @@
-"""Interface Gráfica do Painel de Configurações do Quantum Scribe (v2.1.9).
+"""Interface Gráfica do Painel de Configurações do Quantum Scribe (v3 — Redesign Apple).
 
-Este módulo implementa a janela interativa de configurações em Tkinter,
-alinhada rigorosamente de acordo com o Design System do projeto,
-com barra lateral de navegação premium perfeitamente alinhada à esquerda.
+Redesign completo no estilo dos Ajustes do macOS/iOS:
+
+1. Navegação hierárquica: barra lateral com categorias; cada categoria abre uma
+   página; linhas com chevron (›) abrem subpáginas internas com botão "‹ Voltar" —
+   opções dentro de opções, sem telas sobrepostas.
+2. Aplicação instantânea: cada controle grava e aplica a configuração no momento
+   em que é alterado. Toggles realmente ligam/desligam o recurso correspondente.
+3. Temas dinâmicos: modo Escuro/Claro + cor de destaque selecionável (padrão
+   laranja Quantum), aplicados a todos os componentes via localwhisper.theme.
+4. Downloads com progresso percentual real e monotônico (barra que preenche
+   gradualmente), via localwhisper.download_progress.
+5. Comunicação premium: toasts discretos confirmam cada ação importante.
 """
 
 from __future__ import annotations
 
+import copy
 import glob
 import importlib.util
 import os
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import font, messagebox, ttk
+from tkinter import messagebox, ttk
 from typing import Callable
 
 from PIL import Image, ImageDraw, ImageTk
@@ -21,12 +31,17 @@ from PIL import Image, ImageDraw, ImageTk
 from .backup import create_backup, delete_backup, get_project_root, list_backups, restore_backup
 from .config import AppConfig, is_model_downloaded
 from .diary import diary_dir
+from .download_progress import (
+    download_snapshot_with_progress,
+    download_whisper_with_progress,
+    format_bytes,
+)
 from .hotkey import _parse_hotkey
+from .theme import ACCENT_PRESETS, DEFAULT_ACCENT, Theme, build_theme, font_family
 
 
 def load_or_generate_icon() -> Image.Image:
     """Carrega o ícone oficial em assets/icon.png ou desenha programaticamente se não existir."""
-    # Define caminho
     assets_dir = Path(__file__).parent / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
     icon_path = assets_dir / "icon.png"
@@ -37,33 +52,21 @@ def load_or_generate_icon() -> Image.Image:
         except Exception:
             pass
 
-    # Desenha o ícone programático premium
     img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    # 1. Círculo de fundo preto profundo
     draw.ellipse((8, 8, 248, 248), fill=(10, 11, 14, 255), outline=None)
-
-    # 2. Borda circular neon laranja
     draw.ellipse((8, 8, 248, 248), fill=None, outline=(255, 96, 0, 255), width=6)
-
-    # 3. Desenho de órbitas de átomo em laranja suave
     orb_img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
     orb_draw = ImageDraw.Draw(orb_img)
     orb_draw.ellipse((40, 113, 216, 143), fill=None, outline=(255, 120, 40, 120), width=3)
-
     img.alpha_composite(orb_img)
-    img.alpha_composite(orb_img.rotate(60, resample=Image.BICUBIC))
-    img.alpha_composite(orb_img.rotate(-60, resample=Image.BICUBIC))
-
-    # 4. Desenha microfone estilizado no centro
+    img.alpha_composite(orb_img.rotate(60, resample=Image.Resampling.BICUBIC))
+    img.alpha_composite(orb_img.rotate(-60, resample=Image.Resampling.BICUBIC))
     draw.rounded_rectangle((108, 70, 148, 140), radius=15, fill=(255, 96, 0, 255))
     draw.rounded_rectangle((114, 76, 142, 100), radius=6, fill=(55, 60, 72, 255))
     draw.arc((96, 95, 160, 155), start=0, end=180, fill=(255, 96, 0, 255), width=4)
     draw.line((128, 155, 128, 185), fill=(255, 96, 0, 255), width=5)
     draw.line((100, 185, 156, 185), fill=(255, 96, 0, 255), width=5)
-
-    # 5. Bolinhas dos elétrons
     draw.ellipse((190, 95, 202, 107), fill=(255, 238, 128, 255), outline=None)
     draw.ellipse((54, 95, 66, 107), fill=(255, 238, 128, 255), outline=None)
     draw.ellipse((122, 210, 134, 222), fill=(255, 238, 128, 255), outline=None)
@@ -76,1824 +79,2578 @@ def load_or_generate_icon() -> Image.Image:
     return img
 
 
-# DESIGN SYSTEM: Paleta de Cores (Tema Preto, Laranja e Cinza Espacial)
-BG_COLOR = "#0a0b0d"        # Fundo principal (Preto profundo)
-SIDEBAR_BG = "#13151a"      # Fundo da barra lateral
-CARD_BG = "#111317"         # Fundo de grupos/cards
-INPUT_BG = "#181a21"        # Fundo dos campos de entrada
-BORDER_COLOR = "#2c2f36"    # Borda dos campos e divisórias
-TEXT_COLOR = "#f0f2f5"      # Texto principal
-MUTED_COLOR = "#8a8f9d"     # Texto secundário/status
-ACCENT_COLOR = "#ff6000"    # Cor de destaque (Laranja neon)
-ACCENT_HOVER = "#d65000"    # Cor de hover
-DANGER_COLOR = "#ff4d4d"    # Cor de erro/alerta
-CANCEL_BG = "#1e2026"       # Fundo do botão cancelar
-CANCEL_HOVER = "#272a33"    # Hover do botão cancelar
-SUCCESS_COLOR = "#30d158"   # Verde ativo estilo Apple
-SIDEBAR_ACTIVE = "#20232b"  # Cor do item ativo na sidebar
+# ---------------------------------------------------------------------------
+# Catálogos de opções
+# ---------------------------------------------------------------------------
 
-
-# Mapeamento de Modelos Whisper
-MODELS_MAP = {
+MODELS_MAP: dict[str, dict[str, str]] = {
     "tiny": {
         "id": "tiny",
         "name": "Super Leve (Tiny)",
-        "desc": "Transcreve muito rápido, mas pode errar pontuações e termos complexos (~75MB)",
+        "desc": "Transcreve muito rápido, mas pode errar pontuação e termos complexos.",
+        "size": "~75 MB",
     },
     "base": {
         "id": "base",
         "name": "Leve (Base)",
-        "desc": "Bom equilíbrio entre velocidade e precisão básica (~145MB)",
+        "desc": "Bom equilíbrio entre velocidade e precisão básica.",
+        "size": "~145 MB",
     },
     "small": {
         "id": "small",
         "name": "Equilibrado (Small)",
-        "desc": "Recomendado! Ótima precisão e velocidade para uso diário (~460MB)",
+        "desc": "Ótima precisão e velocidade para o uso diário.",
+        "size": "~460 MB",
     },
     "medium": {
         "id": "medium",
-        "name": "Alto Desempenho / Pro (Medium)",
-        "desc": "Excelente precisão, ideal para termos técnicos (~1.5GB)",
+        "name": "Alto Desempenho (Medium)",
+        "desc": "Excelente precisão, ideal para termos técnicos. Recomendado.",
+        "size": "~1,5 GB",
     },
     "large-v3": {
         "id": "large-v3",
-        "name": "Ultra / Máximo (Large-v3)",
-        "desc": "Precisão máxima absoluta, consome mais memória GPU/RAM (~3.0GB)",
-    }
+        "name": "Máxima Precisão (Large-v3)",
+        "desc": "Precisão absoluta; consome mais memória de GPU/RAM.",
+        "size": "~3,0 GB",
+    },
+}
+
+LANGUAGES: list[tuple[str, str]] = [
+    ("auto", "Detecção Automática"),
+    ("pt", "Português (Brasil)"),
+    ("en", "Inglês"),
+    ("es", "Espanhol"),
+    ("fr", "Francês"),
+    ("de", "Alemão"),
+    ("it", "Italiano"),
+]
+
+DEVICES: list[tuple[str, str, str]] = [
+    ("auto", "Automático", "Detecta a GPU NVIDIA e usa CPU quando não houver suporte."),
+    ("cuda", "GPU (CUDA)", "Máximo desempenho em placas NVIDIA compatíveis."),
+    ("cpu", "CPU", "Funciona em qualquer computador; um pouco mais lento."),
+]
+
+COMPUTE_TYPES: list[tuple[str, str, str]] = [
+    ("auto", "Automática", "Seleciona a precisão mais segura para o seu hardware."),
+    ("int8", "Int8 (leve)", "Menor consumo de memória com ótima velocidade."),
+    ("float16", "Float16 (precisa)", "Maior precisão em GPUs compatíveis."),
+]
+
+HUD_THEMES: list[tuple[str, str, str]] = [
+    ("dots", "Bolinhas", "Cinco pontos animados em onda suave. Discreto e elegante."),
+    ("atom", "Átomo Clássico", "Órbitas de átomo com elétrons em movimento."),
+    ("atom_compact", "Átomo Compacto", "Versão menor e mais oval do átomo."),
+    ("atom_centered", "Átomo Centralizado", "Somente o átomo, centralizado no indicador."),
+    ("atom_minimal", "Átomo Minimalista", "Traço fino e minimalista, quase invisível."),
+]
+
+ENHANCE_PROFILES: list[tuple[str, str, str]] = [
+    ("fast", "Rápido", "Apenas normalização de volume. Quase nenhum custo de CPU."),
+    ("balanced", "Equilibrado", "Filtro de graves + normalização. Recomendado."),
+    ("quality", "Máxima Qualidade", "Redução de ruído espectral completa. Mais lento."),
+]
+
+SILENCE_OPTIONS: list[tuple[int, str]] = [
+    (250, "250 ms — corta rápido, frases curtas"),
+    (350, "350 ms — equilíbrio (padrão)"),
+    (500, "500 ms — tolera pausas maiores"),
+    (700, "700 ms — ideal para fala lenta"),
+]
+
+TONES: list[tuple[str, str, str]] = [
+    ("natural", "Natural", "Corrige ortografia e pontuação mantendo 100% das suas palavras."),
+    ("formal", "Formal", "Reescreve com linguagem profissional, ideal para e-mails."),
+    ("developer", "Desenvolvedor", "Preserva jargões técnicos e termos em inglês."),
+]
+
+DEFAULT_WHISPER_PROMPTS = {
+    "natural": "",
+    "formal": "Linguagem formal, regras cultas.",
+    "developer": "Desenvolvedor de software, termos em inglês, camelCase, Python, React.",
+}
+DEFAULT_LLM_PROMPTS = {
+    "natural": "Corrija ortografia, acentuação e pontuação básicas. Mantenha 100% das palavras originais, a estrutura e a coloquialidade do ditado.",
+    "formal": "Reescreva com linguagem formal, profissional e vocabulário empresarial. Corrija a gramática e remova gírias.",
+    "developer": "Mantenha os jargões de programação em inglês e corrija a estrutura do texto para ficar claro e técnico.",
 }
 
 
-class ModernDropdown(tk.Frame):
-    """Dropdown nativo moderno com largura padronizada de 22 caracteres."""
-    def __init__(self, parent, variable, values, width=22, command=None, *args, **kwargs):
-        super().__init__(parent, bg=INPUT_BG, highlightthickness=1, highlightbackground=BORDER_COLOR, *args, **kwargs)
+# ---------------------------------------------------------------------------
+# Componentes premium reutilizáveis
+# ---------------------------------------------------------------------------
+
+class AppleSwitch(tk.Canvas):
+    """Interruptor Liga/Desliga estilo Apple, desenhado com as cores do tema."""
+
+    W, H = 46, 28
+
+    def __init__(self, parent: tk.Widget, theme: Theme, variable: tk.BooleanVar,
+                 command: Callable[[bool], None] | None = None, bg: str | None = None) -> None:
+        super().__init__(parent, width=self.W, height=self.H, bd=0, highlightthickness=0,
+                         bg=bg or theme.card_bg, cursor="hand2")
+        self.theme = theme
         self.variable = variable
-        self.values = values
         self.command = command
+        self.bind("<Button-1>", lambda _e: self.toggle())
+        self._trace_id = self.variable.trace_add("write", lambda *_: self._draw())
+        self.bind("<Destroy>", self._on_destroy)
+        self._draw()
 
-        self.btn = tk.Button(
-            self, textvariable=self.variable, bg=INPUT_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR,
-            font=("Segoe UI", 9), relief="flat", bd=0, width=width,
-            anchor="w", padx=8, pady=4, cursor="hand2", command=self._show_menu
-        )
-        self.btn.pack(side="left", fill="both", expand=True)
+    def _on_destroy(self, event) -> None:
+        if event.widget is self:
+            try:
+                self.variable.trace_remove("write", self._trace_id)
+            except Exception:
+                pass
 
-        icon_lbl = tk.Label(self, text="▼", font=("Segoe UI", 7), bg=INPUT_BG, fg=MUTED_COLOR)
-        icon_lbl.pack(side="right", padx=(0, 8))
-        icon_lbl.bind("<Button-1>", lambda e: self._show_menu())
-
-        self.menu = tk.Menu(self, tearoff=0, bg=CARD_BG, fg=TEXT_COLOR, activebackground=ACCENT_COLOR, activeforeground="#ffffff", font=("Segoe UI", 9), bd=0)
-        self._update_menu()
-
-    def _update_menu(self):
-        self.menu.delete(0, "end")
-        for val in self.values:
-            self.menu.add_command(label=val, command=lambda v=val: self._on_select(v))
-
-    def _on_select(self, val):
-        self.variable.set(val)
+    def toggle(self) -> None:
+        self.variable.set(not self.variable.get())
         if self.command:
-            self.command()
+            self.command(self.variable.get())
 
-    def _show_menu(self):
-        x = self.winfo_rootx()
-        y = self.winfo_rooty() + self.winfo_height()
-        self.menu.tk_popup(x, y)
-
-    def configure_values(self, values):
-        self.values = values
-        self._update_menu()
-
-
-class ScrollableFrame(tk.Frame):
-    """Um contêiner rolável usando Canvas do Tkinter e Scrollbar minimalista do ttk."""
-    def __init__(self, parent, *args, **kwargs):
-        super().__init__(parent, bg=BG_COLOR, *args, **kwargs)
-
-        self.canvas = tk.Canvas(self, bg=BG_COLOR, bd=0, highlightthickness=0)
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview, style="Vertical.TScrollbar")
-
-        self.scrollable_frame = tk.Frame(self.canvas, bg=BG_COLOR, padx=25, pady=20)
-
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion=self.canvas.bbox("all")
-            )
-        )
-
-        self.scrollable_frame_id = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.bind('<Configure>', self._on_canvas_configure)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
-
-        self.canvas.bind("<Enter>", self._bind_mousewheel)
-        self.canvas.bind("<Leave>", self._unbind_mousewheel)
-
-    def _on_canvas_configure(self, event):
-        self.canvas.itemconfig(self.scrollable_frame_id, width=event.width)
-
-    def _bind_mousewheel(self, event):
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-
-    def _unbind_mousewheel(self, event):
-        self.canvas.unbind_all("<MouseWheel>")
-
-    def _on_mousewheel(self, event):
+    def _draw(self) -> None:
         try:
-            widget_class = event.widget.winfo_class()
-            if widget_class in ("Text", "Treeview"):
+            if not self.winfo_exists():
                 return
-        except Exception:
-            pass
+        except tk.TclError:
+            return
+        self.delete("all")
+        on = bool(self.variable.get())
+        t = self.theme
+        track = t.accent if on else t.track
+        self.create_oval(2, 2, self.H - 2, self.H - 2, fill=track, outline="")
+        self.create_oval(self.W - self.H + 2, 2, self.W - 2, self.H - 2, fill=track, outline="")
+        self.create_rectangle(self.H // 2, 2, self.W - self.H // 2, self.H - 2, fill=track, outline="")
+        knob_r = self.H - 6
+        if on:
+            x0 = self.W - knob_r - 3
+        else:
+            x0 = 3
+        self.create_oval(x0, 3, x0 + knob_r, 3 + knob_r, fill="#FFFFFF", outline="")
 
-        try:
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        except Exception:
-            pass
 
+class ColorSwatch(tk.Canvas):
+    """Círculo de cor selecionável com marca de seleção, estilo seletor do macOS."""
 
-class AppleSwitch(tk.Label):
-    """Interruptor Liga/Desliga dinâmico estilo Apple."""
-    def __init__(self, parent, variable: tk.BooleanVar, on_img: ImageTk.PhotoImage, off_img: ImageTk.PhotoImage, command=None, *args, **kwargs):
-        bg_color = kwargs.get("bg", CARD_BG)
-        super().__init__(parent, image=off_img, bg=bg_color, cursor="hand2")
-        self.variable = variable
-        self.on_img = on_img
-        self.off_img = off_img
+    def __init__(self, parent: tk.Widget, theme: Theme, color: str, size: int = 30,
+                 selected: bool = False, command: Callable[[], None] | None = None,
+                 bg: str | None = None) -> None:
+        super().__init__(parent, width=size + 8, height=size + 8, bd=0, highlightthickness=0,
+                         bg=bg or theme.card_bg, cursor="hand2")
+        self.theme = theme
+        self.color = color
+        self.size = size
+        self.selected = selected
         self.command = command
+        self.bind("<Button-1>", lambda _e: self._clicked())
+        self._draw()
 
-        self.bind("<Button-1>", lambda e: self.toggle())
-        self.update_visual()
-
-    def toggle(self):
-        new_val = not self.variable.get()
-        self.variable.set(new_val)
-        self.update_visual()
+    def _clicked(self) -> None:
         if self.command:
             self.command()
 
-    def update_visual(self):
-        if self.variable.get():
-            self.configure(image=self.on_img)
-        else:
-            self.configure(image=self.off_img)
+    def set_selected(self, selected: bool) -> None:
+        self.selected = selected
+        self._draw()
 
+    def _draw(self) -> None:
+        self.delete("all")
+        pad = 4
+        d = self.size
+        if self.selected:
+            self.create_oval(1, 1, d + 7, d + 7, outline=self.theme.accent, width=2)
+        self.create_oval(pad, pad, pad + d, pad + d, fill=self.color, outline=self.theme.border)
+        if self.selected:
+            cx, cy = pad + d / 2, pad + d / 2
+            self.create_text(cx, cy, text="✓", fill="#FFFFFF", font=("Segoe UI Bold", 11))
+
+
+class SegmentedControl(tk.Frame):
+    """Controle segmentado estilo iOS/macOS (ex.: Escuro | Claro)."""
+
+    def __init__(self, parent: tk.Widget, theme: Theme, options: list[tuple[str, str]],
+                 current: str, command: Callable[[str], None], font_name: str,
+                 bg: str | None = None) -> None:
+        super().__init__(parent, bg=bg or theme.input_bg,
+                         highlightthickness=1, highlightbackground=theme.border)
+        self.theme = theme
+        self.command = command
+        self.current = current
+        self._buttons: dict[str, tk.Label] = {}
+        for key, label in options:
+            lbl = tk.Label(
+                self, text=label, font=(font_name, 10), padx=18, pady=5,
+                bg=self.theme.input_bg, fg=self.theme.muted, cursor="hand2",
+            )
+            lbl.pack(side="left", padx=2, pady=2)
+            lbl.bind("<Button-1>", lambda _e, k=key: self.select(k))
+            self._buttons[key] = lbl
+        self._refresh()
+
+    def select(self, key: str) -> None:
+        if key == self.current:
+            return
+        self.current = key
+        self._refresh()
+        self.command(key)
+
+    def _refresh(self) -> None:
+        for key, lbl in self._buttons.items():
+            if key == self.current:
+                lbl.configure(bg=self.theme.card_bg, fg=self.theme.text,
+                              font= lbl.cget("font"))
+            else:
+                lbl.configure(bg=self.theme.input_bg, fg=self.theme.muted)
+
+
+class Toast(tk.Label):
+    """Notificação discreta exibida na base da janela, estilo banner do macOS."""
+
+    def __init__(self, parent: tk.Widget, theme: Theme, message: str, kind: str = "success") -> None:
+        colors = {"success": theme.success, "error": theme.danger, "info": theme.accent}
+        dot = {"success": "✓", "error": "✕", "info": "●"}.get(kind, "●")
+        super().__init__(
+            parent, text=f" {dot}  {message} ",
+            font=("Segoe UI Semibold", 10),
+            fg=theme.text, bg=theme.card_bg,
+            padx=16, pady=9,
+            highlightthickness=1, highlightbackground=colors.get(kind, theme.accent),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Janela principal de Configurações
+# ---------------------------------------------------------------------------
 
 class SettingsWindow(tk.Toplevel):
-    """Janela de configurações moderna estilo Apple com navegação lateral unificada."""
+    """Janela de configurações premium estilo Apple, com aplicação instantânea."""
 
-    def __init__(self, parent: tk.Tk, current_config: AppConfig, on_save: Callable[[AppConfig], None]) -> None:
+    SIDEBAR_SECTIONS: list[tuple[str, str, str]] = [
+        ("appearance", "◐", "Aparência"),
+        ("dictation", "🎙", "Ditado"),
+        ("ai", "✦", "Inteligência Artificial"),
+        ("audio", "🎧", "Microfone e Áudio"),
+        ("shortcuts", "⌨", "Atalhos"),
+        ("brain", "🧠", "Quantum Brain"),
+        ("storage", "💾", "Armazenamento"),
+        ("about", "ℹ", "Sobre"),
+    ]
+
+    SECTION_TITLES: dict[str, tuple[str, str]] = {
+        "appearance": ("Aparência", "Personalize o tema, as cores e o indicador flutuante."),
+        "dictation": ("Ditado", "Modelo de transcrição, idioma e estilo do texto."),
+        "ai": ("Inteligência Artificial", "Reescrita inteligente, tons e aprendizado."),
+        "audio": ("Microfone e Áudio", "Entrada de som, aprimoramento e streaming."),
+        "shortcuts": ("Atalhos", "Teclas de atalho globais do aplicativo."),
+        "brain": ("Quantum Brain", "Seu segundo cérebro: notas, sínteses e projetos."),
+        "storage": ("Armazenamento", "Histórico de transcrições e backups."),
+        "about": ("Sobre", "Versão, sistema e créditos."),
+    }
+
+    def __init__(self, parent: tk.Tk, current_config: AppConfig,
+                 on_save: Callable[[AppConfig], None]) -> None:
         super().__init__(parent)
-        self.current_config = current_config
         self.on_save_callback = on_save
+        self._cfg: AppConfig = copy.deepcopy(current_config)
 
+        # Estado de tema e tipografia
+        self.theme: Theme = build_theme(
+            getattr(self._cfg, "theme_mode", "dark"),
+            getattr(self._cfg, "accent_color", DEFAULT_ACCENT),
+        )
+        self.font_name = font_family(self)
+
+        # Estado operacional
         self._test_stream = None
         self._test_stream_active = False
         self._smooth_level = 0.0
         self._test_amplitude = 0.0
         self._listed_files: list[str] = []
+        self._backup_items_map: dict = {}
+        self._dl_active = False          # Download de modelo Whisper em andamento
+        self._llm_dl_active = False      # Download do Mini-LLM em andamento
+        self._pages: dict[str, tk.Frame] = {}
+        self._page_builders: dict[str, Callable[[tk.Widget], tk.Frame]] = {}
+        self._page_parents: dict[str, str] = {}
+        self._current_page = ""
+        self._toast_after_id: str | None = None
 
-        # Atributos de widgets
-        self.hotkey_normal_entry = None
-        self.hotkey_translate_entry = None
-        self.hotkey_auto_send_entry = None
-        self.hotkey_quantum_brain_entry = None
-        self.prompt_text = None
-        self.dict_tree = None
-        self.custom_fillers_entry = None
-
-        # Inicialização das variáveis do Design System
-        self._atom_color_val = getattr(self.current_config, "atom_color", "#FF6000")
+        # Variáveis Tkinter espelhando a configuração (widgets reativos)
+        cfg = self._cfg
+        self.paste_var = tk.BooleanVar(value=cfg.auto_paste)
+        self.sounds_var = tk.BooleanVar(value=cfg.play_sounds)
+        self.sound_volume_var = tk.DoubleVar(value=cfg.sound_volume)
+        self.literal_mode_var = tk.BooleanVar(value=cfg.literal_mode)
+        self.punctuation_assist_var = tk.BooleanVar(value=cfg.punctuation_assist)
+        self.learning_var = tk.BooleanVar(value=cfg.continuous_learning)
+        self.rewriter_var = tk.BooleanVar(value=cfg.use_llm_rewriter)
+        self.streaming_var = tk.BooleanVar(value=cfg.streaming_mode)
+        self.audio_enhance_var = tk.BooleanVar(value=cfg.audio_enhance)
+        self.remove_stutters_var = tk.BooleanVar(value=cfg.remove_stutters)
+        self.remove_fillers_var = tk.BooleanVar(value=cfg.remove_fillers)
+        self.quantum_brain_enabled_var = tk.BooleanVar(value=cfg.quantum_brain_enabled)
+        self.quantum_brain_also_paste_var = tk.BooleanVar(value=cfg.quantum_brain_also_paste)
         self.code_only_var = tk.BooleanVar(value=True)
-
-        # Variáveis Tkinter
-        self.paste_var = tk.BooleanVar(value=self.current_config.auto_paste)
-        self.sounds_var = tk.BooleanVar(value=self.current_config.play_sounds)
-        self.sound_volume_var = tk.DoubleVar(value=self.current_config.sound_volume)
-
-        self._theme_id_map = {
-            "Bolinhas (padrão)": "dots",
-            "Átomo clássico": "atom",
-            "Átomo compacto": "atom_compact",
-            "Átomo minimalista": "atom_minimal",
-            "Apenas Átomo no Centro": "atom_centered",
-        }
-        self._theme_name_map = {v: k for k, v in self._theme_id_map.items()}
-        current_theme_name = self._theme_name_map.get(getattr(self.current_config, "hud_theme", "dots"), "Bolinhas (padrão)")
-        self.hud_theme_var = tk.StringVar(value=current_theme_name)
-
-        self.tone_var = tk.StringVar(value=getattr(self.current_config, "tone_style", "natural"))
-        self.literal_mode_var = tk.BooleanVar(value=getattr(self.current_config, "literal_mode", True))
-        self.punctuation_assist_var = tk.BooleanVar(value=getattr(self.current_config, "punctuation_assist", True))
-        self.learning_var = tk.BooleanVar(value=getattr(self.current_config, "continuous_learning", False))
-        self.rewriter_var = tk.BooleanVar(value=getattr(self.current_config, "use_llm_rewriter", False))
-        self.ai_mode_var = tk.BooleanVar(value=getattr(self.current_config, "ai_mode", True))
-
-        self.friendly_to_id = {model["name"]: model_id for model_id, model in MODELS_MAP.items()}
-        self.id_to_friendly = {model_id: model["name"] for model_id, model in MODELS_MAP.items()}
-        current_friendly = self.id_to_friendly.get(self.current_config.model, "Alto Desempenho / Pro (Medium)")
-        self.model_name_var = tk.StringVar(value=current_friendly)
-
-        self._lang_friendly_map = {
-            "Detecção Automática": "auto",
-            "Português (Brasil)": "pt",
-            "Português (Portugal)": "pt",
-            "Inglês": "en",
-            "Espanhol": "es",
-            "Francês": "fr",
-            "Alemão": "de",
-            "Italiano": "it"
-        }
-        self._lang_code_map = {
-            "auto": "Detecção Automática",
-            "pt": "Português (Brasil)",
-            "en": "Inglês",
-            "es": "Espanhol",
-            "fr": "Francês",
-            "de": "Alemão",
-            "it": "Italiano"
-        }
-        current_lang_code = self.current_config.language or "auto"
-        current_friendly_lang = self._lang_code_map.get(current_lang_code, "Detecção Automática")
-        self.lang_friendly_var = tk.StringVar(value=current_friendly_lang)
-
-        self.device_var = tk.StringVar(value=self.current_config.device)
-        self.compute_var = tk.StringVar(value=self.current_config.compute_type)
-
-        current_mic = self.current_config.audio_device or "Padrão do Sistema"
-        self.mic_var = tk.StringVar(value=current_mic)
-
-        self.streaming_var = tk.BooleanVar(value=getattr(self.current_config, "streaming_mode", False))
-        self.min_silence_var = tk.IntVar(value=getattr(self.current_config, "stream_min_silence_ms", 350))
-        self.audio_enhance_var = tk.BooleanVar(value=getattr(self.current_config, "audio_enhance", True))
-        self._profile_id_map = {
-            "Rápido (apenas volume)": "fast",
-            "Equilibrado (recomendado)": "balanced",
-            "Máxima Qualidade (redução de ruído)": "quality"
-        }
-        self._profile_name_map = {v: k for k, v in self._profile_id_map.items()}
-        current_profile_name = self._profile_name_map.get(
-            getattr(self.current_config, "audio_enhance_profile", "balanced"),
-            "Equilibrado (recomendado)"
-        )
-        self.audio_enhance_profile_var = tk.StringVar(value=current_profile_name)
-        self.remove_stutters_var = tk.BooleanVar(value=getattr(self.current_config, "remove_stutters", False))
-        self.remove_fillers_var = tk.BooleanVar(value=getattr(self.current_config, "remove_fillers", False))
-
-        self.quantum_brain_enabled_var = tk.BooleanVar(value=getattr(self.current_config, "quantum_brain_enabled", True))
-        self.quantum_brain_also_paste_var = tk.BooleanVar(value=getattr(self.current_config, "quantum_brain_also_paste", True))
-        self.quantum_brain_sync_interval_var = tk.IntVar(value=getattr(self.current_config, "quantum_brain_sync_interval_min", 30))
-        self.quantum_brain_sync_threshold_var = tk.IntVar(value=getattr(self.current_config, "quantum_brain_sync_threshold", 5))
 
         try:
             self._icon_img = load_or_generate_icon()
             self._icon_photo = ImageTk.PhotoImage(self._icon_img)
             self.iconphoto(False, self._icon_photo)
         except Exception:
-            pass
+            self._icon_img = None
 
-        self._generate_switch_images()
+        self.title("Quantum Scribe — Ajustes")
+        self.minsize(900, 600)
 
-        self.title("Quantum Scribe — Configurações")
-        self.configure(bg=BG_COLOR)
-        self.resizable(False, False)
-
-        width = 780
-        height = 540
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        x = (sw - width) // 2
-        y = (sh - height) // 2
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        width, height = 980, 660
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        self.geometry(f"{width}x{height}+{(sw - width) // 2}+{(sh - height) // 2}")
 
         self.withdraw()
-
-        self._setup_styles()
-
-        self.main_container = tk.Frame(self, bg=BG_COLOR)
-        self.main_container.pack(fill="both", expand=True)
-
-        self.sidebar_frame = tk.Frame(self.main_container, bg=SIDEBAR_BG, width=200)
-        self.sidebar_frame.pack(side="left", fill="y")
-        self.sidebar_frame.pack_propagate(False)
-
-        # Content frame sem padding para que a scrollbar encoste no canto direito
-        self.content_frame = tk.Frame(self.main_container, bg=BG_COLOR)
-        self.content_frame.pack(side="right", fill="both", expand=True)
-
-        self._panels: dict[str, tk.Frame] = {}
-        self._sidebar_btns: dict[str, dict[str, tk.Widget]] = {}
-
-        self._build_sidebar()
-        self._build_footer()
-
-        self.scrollable_container = ScrollableFrame(self.content_frame)
-        self.scrollable_container.pack(side="top", fill="both", expand=True)
-
+        self._build_window()
         self.protocol("WM_DELETE_WINDOW", self.destroy)
-
-        self._show_section("dictation_ai")
 
         self.update_idletasks()
         self.deiconify()
         self.focus_set()
 
+    # ------------------------------------------------------------------
+    # Construção e reconstrução da janela (necessário ao trocar o tema)
+    # ------------------------------------------------------------------
+
+    def _build_window(self) -> None:
+        t = self.theme
+        self.configure(bg=t.bg)
+
+        for child in self.winfo_children():
+            child.destroy()
+        self._pages.clear()
+        self._page_builders.clear()
+        self._page_parents.clear()
+
+        self._setup_styles()
+
+        self._body = tk.Frame(self, bg=t.bg)
+        self._body.pack(fill="both", expand=True)
+
+        self._sidebar = tk.Frame(self._body, bg=t.sidebar_bg, width=224)
+        self._sidebar.pack(side="left", fill="y")
+        self._sidebar.pack_propagate(False)
+        tk.Frame(self._body, bg=t.border, width=1).pack(side="left", fill="y")
+
+        self._content = tk.Frame(self._body, bg=t.bg)
+        self._content.pack(side="left", fill="both", expand=True)
+
+        self._build_sidebar()
+        self._register_pages()
+
+        if not self._current_page:
+            self._current_page = "appearance"
+        self._show(self._current_page, update_sidebar=True)
+
     def _setup_styles(self) -> None:
+        t = self.theme
         style = ttk.Style(self)
         style.theme_use("clam")
 
-        # Estilização da Scrollbar Minimalista Premium (clam)
         style.configure(
             "Vertical.TScrollbar",
             gripcount=0,
-            background=INPUT_BG,
-            troughcolor=BG_COLOR,
-            bordercolor=BORDER_COLOR,
-            lightcolor=BORDER_COLOR,
-            darkcolor=BORDER_COLOR,
-            arrowsize=0  # Esconde setas clássicas
+            background=t.input_bg,
+            troughcolor=t.bg,
+            bordercolor=t.bg,
+            lightcolor=t.bg,
+            darkcolor=t.bg,
+            arrowsize=0,
         )
-        style.map(
-            "Vertical.TScrollbar",
-            background=[("active", ACCENT_COLOR), ("pressed", ACCENT_HOVER)],
-        )
+        style.map("Vertical.TScrollbar", background=[("active", t.accent)])
 
         style.configure(
-            "TCombobox",
-            fieldbackground=INPUT_BG,
-            background=BORDER_COLOR,
-            foreground=TEXT_COLOR,
-            bordercolor=BORDER_COLOR,
-            arrowcolor=TEXT_COLOR,
-            lightcolor=BORDER_COLOR,
-            darkcolor=BORDER_COLOR,
-            padding=(8, 5),
-            font=("Segoe UI Variable", 9) if "Segoe UI Variable" in font.families() else ("Segoe UI", 9),
+            "Accent.Horizontal.TProgressbar",
+            troughcolor=t.track,
+            background=t.accent,
+            bordercolor=t.track,
+            lightcolor=t.accent,
+            darkcolor=t.accent,
+            thickness=8,
         )
-        style.map(
-            "TCombobox",
-            fieldbackground=[("readonly", INPUT_BG)],
-            foreground=[("readonly", TEXT_COLOR)],
-            focusfill=[("readonly", INPUT_BG)],
-            selectbackground=[("readonly", INPUT_BG)],
-            selectforeground=[("readonly", TEXT_COLOR)],
-        )
-
-        self.option_add("*TCombobox*Listbox.background", INPUT_BG)
-        self.option_add("*TCombobox*Listbox.foreground", TEXT_COLOR)
-        self.option_add("*TCombobox*Listbox.selectBackground", ACCENT_COLOR)
-        self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-        self.option_add("*TCombobox*Listbox.font", ("Segoe UI", 9))
-        self.option_add("*TCombobox*Listbox.borderWidth", 1)
-        self.option_add("*TCombobox*Listbox.relief", "flat")
 
         style.configure(
             "Treeview",
-            background=INPUT_BG,
-            foreground=TEXT_COLOR,
-            fieldbackground=INPUT_BG,
-            bordercolor=BORDER_COLOR,
+            background=t.input_bg,
+            foreground=t.text,
+            fieldbackground=t.input_bg,
+            bordercolor=t.border,
             borderwidth=0,
-            font=("Segoe UI", 9)
+            font=(self.font_name, 9),
         )
         style.configure(
             "Treeview.Heading",
-            background=CARD_BG,
-            foreground=MUTED_COLOR,
+            background=t.card_bg,
+            foreground=t.muted,
             relief="flat",
-            font=("Segoe UI Semibold", 9)
+            font=(self.font_name, 9, "bold"),
         )
-        style.map("Treeview", background=[("selected", ACCENT_COLOR)])
-        style.map("Treeview.Heading", background=[("active", CARD_BG)])
+        style.map("Treeview", background=[("selected", t.accent)],
+                  foreground=[("selected", t.on_accent)])
 
-    def _generate_switch_images(self) -> None:
-        """Gera as imagens para os switches estilo Apple em memória."""
-        w, h = 40, 22
+    # ------------------------------------------------------------------
+    # Navegação (categorias → páginas → subpáginas)
+    # ------------------------------------------------------------------
 
-        img_on = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        draw_on = ImageDraw.Draw(img_on)
-        draw_on.rounded_rectangle((0, 0, w - 1, h - 1), radius=h // 2, fill=(48, 209, 88, 255))
-        draw_on.ellipse((w - h + 2, 2, w - 2, h - 2), fill=(255, 255, 255, 255))
+    def _register_page(self, page_id: str, builder: Callable[[tk.Widget], tk.Frame],
+                       parent: str | None = None) -> None:
+        self._page_builders[page_id] = builder
+        if parent:
+            self._page_parents[page_id] = parent
 
-        img_off = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        draw_off = ImageDraw.Draw(img_off)
-        draw_off.rounded_rectangle((0, 0, w - 1, h - 1), radius=h // 2, fill=(62, 62, 66, 255))
-        draw_off.ellipse((2, 2, h - 2, h - 2), fill=(255, 255, 255, 255))
+    def _show(self, page_id: str, update_sidebar: bool = False) -> None:
+        if self._current_page == page_id and page_id in self._pages:
+            return
 
-        self._switch_on_photo = ImageTk.PhotoImage(img_on)
-        self._switch_off_photo = ImageTk.PhotoImage(img_off)
+        if self._current_page == "sub_mic":
+            self._stop_test_stream()
 
-    def _create_toggle(self, parent: tk.Widget, variable: tk.BooleanVar, command=None) -> AppleSwitch:
-        """Cria uma chave liga/desliga estilo Apple alinhada à direita via Grid."""
-        switch = AppleSwitch(parent, variable, self._switch_on_photo, self._switch_off_photo, command=command, bg=CARD_BG)
-        switch.grid(row=0, column=1, sticky="e", padx=10)
-        return switch
+        for page in self._pages.values():
+            page.pack_forget()
 
-    def _create_card(self, parent: tk.Widget, title: str | None = None) -> tk.Frame:
-        """Cria um frame estilo Card com fundo contrastante e borda sutil."""
-        card_frame = tk.Frame(
-            parent, bg=CARD_BG, highlightthickness=1,
-            highlightbackground=BORDER_COLOR, bd=0
-        )
-        card_frame.pack(fill="x", pady=(0, 15), padx=5)
+        self._current_page = page_id
 
-        if title:
-            title_lbl = tk.Label(
-                card_frame, text=title.upper(),
-                font=("Segoe UI Bold", 8), fg=ACCENT_COLOR, bg=CARD_BG,
-                anchor="w", padx=15, pady=5
+        if page_id not in self._pages:
+            builder = self._page_builders.get(page_id)
+            if builder is None:
+                return
+            self._pages[page_id] = builder(self._content)
+
+        self._pages[page_id].pack(fill="both", expand=True)
+
+        if update_sidebar:
+            root_section = self._root_section_of(page_id)
+            self._highlight_sidebar(root_section)
+
+    def _root_section_of(self, page_id: str) -> str:
+        while page_id in self._page_parents:
+            page_id = self._page_parents[page_id]
+        return page_id
+
+    def _go_back(self) -> None:
+        parent = self._page_parents.get(self._current_page)
+        if parent:
+            self._show(parent, update_sidebar=True)
+
+    def _highlight_sidebar(self, section_id: str) -> None:
+        t = self.theme
+        for sid, widgets in self._sidebar_btns.items():
+            active = sid == section_id
+            bg = t.sidebar_active if active else t.sidebar_bg
+            widgets["frame"].configure(bg=bg)
+            widgets["icon"].configure(bg=bg, fg=t.accent if active else t.muted)
+            widgets["text"].configure(
+                bg=bg,
+                fg=t.text if active else t.muted,
+                font=(self.font_name, 10, "bold" if active else "normal"),
             )
-            title_lbl.pack(fill="x", pady=(10, 2))
 
-        return card_frame
-
-    def _create_card_row(self, card: tk.Frame, label_text: str, desc_text: str | None = None) -> tk.Frame:
-        """Cria uma linha de opção alinhada dentro de um Card usando Grid para simetria visual."""
-        existing_children = card.winfo_children()
-        if len(existing_children) > 0:
-            last_child = existing_children[-1]
-            if not (isinstance(last_child, tk.Label) and last_child.cget("text") and last_child.cget("text").isupper()):
-                sep = tk.Frame(card, bg=BORDER_COLOR, height=1)
-                sep.pack(fill="x", padx=15)
-
-        row = tk.Frame(card, bg=CARD_BG, padx=15, pady=10)
-        row.pack(fill="x")
-
-        row.columnconfigure(0, weight=1)
-        row.columnconfigure(1, weight=0)
-
-        text_container = tk.Frame(row, bg=CARD_BG)
-        text_container.grid(row=0, column=0, sticky="w")
-
-        lbl = tk.Label(
-            text_container, text=label_text,
-            font=("Segoe UI Semibold", 9), fg=TEXT_COLOR, bg=CARD_BG,
-            anchor="w"
-        )
-        lbl.pack(fill="x", anchor="w")
-
-        if desc_text:
-            desc_lbl = tk.Label(
-                text_container, text=desc_text,
-                font=("Segoe UI", 8), fg=MUTED_COLOR, bg=CARD_BG,
-                anchor="w", justify="left"
-            )
-            desc_lbl.pack(fill="x", anchor="w", pady=(2, 0))
-
-        return row
-
-    def _build_sidebar_button(self, parent: tk.Widget, sid: str, icon: str, text: str) -> tk.Frame:
-        """Constrói um botão de navegação premium para a barra lateral com alinhamento pixel-perfect."""
-        btn_frame = tk.Frame(parent, bg=SIDEBAR_BG, cursor="hand2")
-        btn_frame.pack(fill="x", pady=2, padx=10)
-
-        # Label para o ícone (com largura fixa no Tkinter para alinhar os textos perfeitamente)
-        icon_lbl = tk.Label(
-            btn_frame, text=icon, font=("Segoe UI Symbol", 11),
-            fg=MUTED_COLOR, bg=SIDEBAR_BG, width=3, anchor="center"
-        )
-        icon_lbl.pack(side="left", padx=(10, 5), pady=8)
-
-        # Label para o texto (alinhado estritamente à esquerda 'w')
-        text_lbl = tk.Label(
-            btn_frame, text=text, font=("Segoe UI", 10),
-            fg=TEXT_COLOR, bg=SIDEBAR_BG, anchor="w", justify="left"
-        )
-        text_lbl.pack(side="left", fill="both", expand=True, pady=8)
-
-        # Armazena referências para reconfigurar os estados visuais
-        self._sidebar_btns[sid] = {
-            "frame": btn_frame,
-            "icon": icon_lbl,
-            "text": text_lbl
-        }
-
-        # Faz bind dos cliques e do hover em todos os subwidgets para que o botão inteiro seja interativo
-        for w in (btn_frame, icon_lbl, text_lbl):
-            w.bind("<Button-1>", lambda e, s=sid: self._show_section(s))
-            w.bind("<Enter>", lambda e, s=sid: self._on_sidebar_hover(s, True))
-            w.bind("<Leave>", lambda e, s=sid: self._on_sidebar_hover(s, False))
-
-        return btn_frame
+    # ------------------------------------------------------------------
+    # Barra lateral
+    # ------------------------------------------------------------------
 
     def _build_sidebar(self) -> None:
+        t = self.theme
+
+        header = tk.Frame(self._sidebar, bg=t.sidebar_bg)
+        header.pack(fill="x", padx=18, pady=(22, 14))
+
+        if self._icon_img is not None:
+            try:
+                self._sidebar_icon = ImageTk.PhotoImage(
+                    self._icon_img.resize((30, 30), Image.Resampling.LANCZOS))
+                tk.Label(header, image=self._sidebar_icon, bg=t.sidebar_bg).pack(side="left")
+            except Exception:
+                pass
+
         tk.Label(
-            self.sidebar_frame,
-            text="Quantum Scribe",
-            font=("Segoe UI Semibold", 14),
-            fg=ACCENT_COLOR,
-            bg=SIDEBAR_BG,
-            pady=20,
-            padx=20,
-            anchor="w"
-        ).pack(fill="x")
+            header, text="Ajustes", font=(self.font_name, 15, "bold"),
+            fg=t.text, bg=t.sidebar_bg,
+        ).pack(side="left", padx=(10, 0))
 
-        sections = [
-            ("dictation_ai", "🎙", "Ditado & IA"),
-            ("preferences", "⚙", "Preferências"),
-            ("system_notes", "🧠", "Sistema & Notas"),
-            ("about", "ℹ", "Sobre")
-        ]
+        self._sidebar_btns: dict[str, dict[str, tk.Widget]] = {}
+        for sid, icon, text in self.SIDEBAR_SECTIONS:
+            self._sidebar_button(sid, icon, text)
 
-        for sid, icon, text in sections:
-            self._build_sidebar_button(self.sidebar_frame, sid, icon, text)
+    def _sidebar_button(self, sid: str, icon: str, text: str) -> None:
+        t = self.theme
+        frame = tk.Frame(self._sidebar, bg=t.sidebar_bg, cursor="hand2")
+        frame.pack(fill="x", padx=10, pady=1)
 
-        self._current_section = ""
+        icon_lbl = tk.Label(frame, text=icon, font=("Segoe UI Symbol", 12),
+                            fg=t.muted, bg=t.sidebar_bg, width=3, anchor="center")
+        icon_lbl.pack(side="left", padx=(8, 4), pady=8)
 
-    def _on_sidebar_hover(self, section_id: str, is_enter: bool) -> None:
-        if self._current_section == section_id:
+        text_lbl = tk.Label(frame, text=text, font=(self.font_name, 10),
+                            fg=t.muted, bg=t.sidebar_bg, anchor="w")
+        text_lbl.pack(side="left", fill="x", expand=True, pady=8)
+
+        self._sidebar_btns[sid] = {"frame": frame, "icon": icon_lbl, "text": text_lbl}
+
+        for w in (frame, icon_lbl, text_lbl):
+            w.bind("<Button-1>", lambda _e, s=sid: self._show(s, update_sidebar=True))
+            w.bind("<Enter>", lambda _e, s=sid: self._sidebar_hover(s, True))
+            w.bind("<Leave>", lambda _e, s=sid: self._sidebar_hover(s, False))
+
+    def _sidebar_hover(self, sid: str, entering: bool) -> None:
+        if self._root_section_of(self._current_page) == sid:
             return
-        btn = self._sidebar_btns[section_id]
-        bg_color = SIDEBAR_ACTIVE if is_enter else SIDEBAR_BG
-        btn["frame"].configure(bg=bg_color)
-        btn["icon"].configure(bg=bg_color)
-        btn["text"].configure(bg=bg_color)
+        t = self.theme
+        widgets = self._sidebar_btns[sid]
+        bg = t.hover_bg if entering else t.sidebar_bg
+        widgets["frame"].configure(bg=bg)
+        widgets["icon"].configure(bg=bg)
+        widgets["text"].configure(bg=bg)
 
-    def _show_section(self, section_id: str) -> None:
-        if self._current_section == section_id:
-            return
+    # ------------------------------------------------------------------
+    # Infraestrutura de páginas e linhas
+    # ------------------------------------------------------------------
 
-        if self._current_section:
-            old_btn = self._sidebar_btns[self._current_section]
-            old_btn["frame"].configure(bg=SIDEBAR_BG)
-            old_btn["icon"].configure(bg=SIDEBAR_BG, fg=MUTED_COLOR)
-            old_btn["text"].configure(bg=SIDEBAR_BG, fg=TEXT_COLOR, font=("Segoe UI", 10), anchor="w")
-            if self._current_section in self._panels:
-                self._panels[self._current_section].pack_forget()
+    def _page_shell(self, title: str, subtitle: str,
+                    back_to: str | None = None) -> tuple[tk.Frame, tk.Frame]:
+        """Cria o contêiner de página com cabeçalho e área rolável."""
+        t = self.theme
+        page = tk.Frame(self._content, bg=t.bg)
 
-        self._current_section = section_id
-        new_btn = self._sidebar_btns[section_id]
-        new_btn["frame"].configure(bg=SIDEBAR_ACTIVE)
-        new_btn["icon"].configure(bg=SIDEBAR_ACTIVE, fg=ACCENT_COLOR)
-        new_btn["text"].configure(bg=SIDEBAR_ACTIVE, fg=TEXT_COLOR, font=("Segoe UI Semibold", 10), anchor="w")
+        header = tk.Frame(page, bg=t.bg)
+        header.pack(fill="x", padx=28, pady=(22, 6))
 
-        if section_id not in self._panels:
-            parent_frame = self.scrollable_container.scrollable_frame
-            if section_id == "dictation_ai":
-                self._panels["dictation_ai"] = self._build_dictation_ai_panel(parent_frame)
-            elif section_id == "preferences":
-                self._panels["preferences"] = self._build_preferences_panel(parent_frame)
-            elif section_id == "system_notes":
-                self._panels["system_notes"] = self._build_system_notes_panel(parent_frame)
-            elif section_id == "about":
-                self._panels["about"] = self._build_about_panel(parent_frame)
+        if back_to:
+            back = tk.Label(
+                header, text=f"‹ {self.SECTION_TITLES.get(back_to, ('Voltar', ''))[0]}",
+                font=(self.font_name, 11, "bold"), fg=t.accent, bg=t.bg, cursor="hand2",
+            )
+            back.pack(anchor="w", pady=(0, 6))
+            back.bind("<Button-1>", lambda _e: self._go_back())
+            back.bind("<Enter>", lambda _e: back.configure(fg=t.accent_hover))
+            back.bind("<Leave>", lambda _e: back.configure(fg=t.accent))
 
-        self._panels[section_id].pack(fill="both", expand=True)
+        tk.Label(header, text=title, font=(self.font_name, 20, "bold"),
+                 fg=t.text, bg=t.bg).pack(anchor="w")
+        if subtitle:
+            tk.Label(header, text=subtitle, font=(self.font_name, 10),
+                     fg=t.muted, bg=t.bg).pack(anchor="w", pady=(2, 0))
 
-        try:
-            self.scrollable_container.canvas.yview_moveto(0)
-        except Exception:
-            pass
+        scroll = ScrollArea(page, theme_bg=t.bg)
+        scroll.pack(fill="both", expand=True, padx=28, pady=(10, 20))
+        return page, scroll.inner
 
-        if section_id == "system_notes":
-            self._refresh_transcriptions_list()
-            self._refresh_backups_list()
-            self._update_quantum_brain_stats()
+    def _card(self, parent: tk.Widget, title: str | None = None) -> tk.Frame:
+        t = self.theme
+        if title:
+            tk.Label(
+                parent, text=title.upper(), font=(self.font_name, 8, "bold"),
+                fg=t.muted, bg=t.bg, anchor="w",
+            ).pack(fill="x", pady=(14, 6), padx=4)
+        card = tk.Frame(parent, bg=t.card_bg,
+                        highlightthickness=1, highlightbackground=t.border)
+        card.pack(fill="x", pady=(0, 6))
+        return card
 
-    def _build_header(self, parent: tk.Frame, title: str, desc: str) -> None:
-        header = tk.Frame(parent, bg=BG_COLOR)
-        header.pack(fill="x", pady=(0, 20))
-        tk.Label(header, text=title, font=("Segoe UI Semibold", 16), fg=TEXT_COLOR, bg=BG_COLOR).pack(anchor="w")
-        tk.Label(header, text=desc, font=("Segoe UI", 9), fg=MUTED_COLOR, bg=BG_COLOR).pack(anchor="w")
+    def _separator(self, card: tk.Frame) -> None:
+        if card.winfo_children():
+            tk.Frame(card, bg=self.theme.border, height=1).pack(fill="x", padx=16)
 
-    def _create_styled_entry(self, parent: tk.Widget, initial_value: str) -> tk.Entry:
+    def _row_base(self, card: tk.Frame, label: str, desc: str | None = None) -> tk.Frame:
+        self._separator(card)
+        t = self.theme
+        row = tk.Frame(card, bg=t.card_bg)
+        row.pack(fill="x", padx=16, pady=11)
+        row.columnconfigure(0, weight=1)
+
+        text_box = tk.Frame(row, bg=t.card_bg)
+        text_box.grid(row=0, column=0, sticky="w")
+        tk.Label(text_box, text=label, font=(self.font_name, 10, "bold"),
+                 fg=t.text, bg=t.card_bg, anchor="w").pack(fill="x")
+        if desc:
+            tk.Label(text_box, text=desc, font=(self.font_name, 8),
+                     fg=t.muted, bg=t.card_bg, anchor="w", justify="left",
+                     wraplength=430).pack(fill="x", pady=(1, 0))
+        return row
+
+    def _row_toggle(self, card: tk.Frame, label: str, desc: str,
+                    variable: tk.BooleanVar, field: str,
+                    on_change: Callable[[bool], None] | None = None,
+                    toast: str | None = None) -> tk.Frame:
+        row = self._row_base(card, label, desc)
+
+        def changed(value: bool) -> None:
+            self._set(field, value, toast=toast)
+            if on_change:
+                on_change(value)
+
+        switch = AppleSwitch(row, self.theme, variable, command=changed, bg=self.theme.card_bg)
+        switch.grid(row=0, column=1, sticky="e")
+        return row
+
+    def _row_nav(self, card: tk.Frame, label: str, desc: str | None,
+                 value: str | Callable[[], str], target: str) -> tk.Frame:
+        row = self._row_base(card, label, desc)
+        t = self.theme
+
+        right = tk.Frame(row, bg=t.card_bg, cursor="hand2")
+        right.grid(row=0, column=1, sticky="e")
+
+        value_lbl = tk.Label(right, text=value if isinstance(value, str) else value(),
+                             font=(self.font_name, 10), fg=t.muted, bg=t.card_bg)
+        value_lbl.pack(side="left", padx=(0, 6))
+        if callable(value):
+            row._value_refresher = lambda: value_lbl.configure(text=value())  # type: ignore[attr-defined]
+
+        chevron = tk.Label(right, text="›", font=(self.font_name, 14),
+                           fg=t.muted, bg=t.card_bg)
+        chevron.pack(side="left")
+
+        def go(_event=None) -> None:
+            self._show(target, update_sidebar=True)
+
+        for w in (row, right, value_lbl, chevron):
+            w.bind("<Button-1>", go)
+            w.configure(cursor="hand2")
+        row.bind("<Enter>", lambda _e: self._row_hover(row, True))
+        row.bind("<Leave>", lambda _e: self._row_hover(row, False))
+        return row
+
+    def _row_hover(self, row: tk.Frame, entering: bool) -> None:
+        # Hover sutil: mantém o card, apenas o cursor já indica clicabilidade.
+        pass
+
+    def _row_action(self, card: tk.Frame, label: str, desc: str | None,
+                    button_text: str, command: Callable[[], None],
+                    kind: str = "primary") -> tk.Frame:
+        row = self._row_base(card, label, desc)
+        t = self.theme
+        styles = {
+            "primary": (t.accent, t.on_accent, t.accent_hover),
+            "secondary": (t.input_bg, t.text, t.hover_bg),
+            "danger": (t.input_bg, t.danger, t.hover_bg),
+        }
+        bg, fg, hover = styles.get(kind, styles["primary"])
+        btn = tk.Label(row, text=button_text, font=(self.font_name, 9, "bold"),
+                       bg=bg, fg=fg, padx=14, pady=6, cursor="hand2")
+        btn.grid(row=0, column=1, sticky="e")
+        btn.bind("<Button-1>", lambda _e: command())
+        btn.bind("<Enter>", lambda _e: btn.configure(bg=hover))
+        btn.bind("<Leave>", lambda _e: btn.configure(bg=bg))
+        return row
+
+    def _button(self, parent: tk.Widget, text: str, command: Callable[[], None],
+                kind: str = "primary") -> tk.Label:
+        t = self.theme
+        styles = {
+            "primary": (t.accent, t.on_accent, t.accent_hover),
+            "secondary": (t.input_bg, t.text, t.hover_bg),
+            "danger": (t.input_bg, t.danger, t.hover_bg),
+        }
+        bg, fg, hover = styles.get(kind, styles["primary"])
+        btn = tk.Label(parent, text=text, font=(self.font_name, 9, "bold"),
+                       bg=bg, fg=fg, padx=14, pady=7, cursor="hand2")
+        btn.bind("<Button-1>", lambda _e: command())
+        btn.bind("<Enter>", lambda _e: btn.configure(bg=hover))
+        btn.bind("<Leave>", lambda _e: btn.configure(bg=bg))
+        return btn
+
+    def _styled_entry(self, parent: tk.Widget, value: str, width: int = 24) -> tk.Entry:
+        t = self.theme
         entry = tk.Entry(
-            parent, bg=INPUT_BG, fg=TEXT_COLOR, font=("Segoe UI", 9),
+            parent, bg=t.input_bg, fg=t.text, font=(self.font_name, 10),
             relief="flat", bd=0, highlightthickness=1,
-            highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_COLOR,
-            insertbackground=TEXT_COLOR, width=22
+            highlightbackground=t.border, highlightcolor=t.accent,
+            insertbackground=t.text, width=width,
         )
-        entry.insert(0, initial_value)
+        entry.insert(0, value)
         return entry
 
-    # ------------------ PAINEL 1: DITADO & IA ------------------
-    def _build_dictation_ai_panel(self, parent: tk.Widget) -> tk.Frame:
-        frame = tk.Frame(parent, bg=BG_COLOR)
-        self._build_header(frame, "Ditado & Inteligência Artificial", "Configure o motor de reconhecimento de voz e estilo de pós-processamento.")
-
-        # --- Card 1: Motor Whisper ---
-        card_whisper = self._create_card(frame, "Reconhecimento de Voz (Whisper)")
-
-        row_model = self._create_card_row(card_whisper, "Modelo da IA", "Tamanho do modelo Whisper (tiny, base, small, medium, large).")
-        self.model_combo = ModernDropdown(row_model, variable=self.model_name_var, values=list(self.friendly_to_id.keys()), width=22, command=self._on_model_changed)
-        self.model_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        # Status / Progresso download Whisper
-        self.download_status_frame = tk.Frame(card_whisper, bg=CARD_BG)
-        self.download_status_frame.pack(fill="x", padx=15, pady=(5, 10))
-
-        self.download_status_label = tk.Label(self.download_status_frame, text="", font=("Segoe UI Semibold", 8), bg=CARD_BG, fg=MUTED_COLOR, anchor="w")
-        self.download_status_label.pack(anchor="w", pady=(0, 2))
-
-        self.download_progress_var = tk.DoubleVar(value=0.0)
-        self.download_progress_bar = ttk.Progressbar(
-            self.download_status_frame, orient="horizontal",
-            variable=self.download_progress_var, length=250, mode="determinate"
-        )
-        self.download_progress_bar.pack_forget()
-
-        self.download_btn = tk.Button(
-            self.download_status_frame, text="Baixar Modelo Whisper", bg=ACCENT_COLOR, fg="#ffffff",
-            activebackground=ACCENT_HOVER, activeforeground="#ffffff", font=("Segoe UI Bold", 8),
-            relief="flat", bd=0, padx=10, pady=2, cursor="hand2", command=self._download_selected_model
-        )
-        self.download_btn.pack(side="left", pady=(5, 0))
-
-        row_lang = self._create_card_row(card_whisper, "Idioma", "Idioma padrão de transcrição (ou detecção automática).")
-        self.lang_combo = ModernDropdown(row_lang, variable=self.lang_friendly_var, values=list(self._lang_friendly_map.keys()), width=22)
-        self.lang_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        row_device = self._create_card_row(card_whisper, "Hardware", "Processador utilizado para rodar a transcrição (CPU ou GPU CUDA).")
-        self.device_combo = ModernDropdown(row_device, variable=self.device_var, values=["cpu", "cuda", "auto"], width=15)
-        self.device_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        row_compute = self._create_card_row(card_whisper, "Precisão (Quantização)", "Tipo de precisão matemática das operações.")
-        self.compute_combo = ModernDropdown(row_compute, variable=self.compute_var, values=["int8", "float16", "auto"], width=15)
-        self.compute_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        # Prompt Auxiliar Fixo
-        sep = tk.Frame(card_whisper, bg=BORDER_COLOR, height=1)
-        sep.pack(fill="x", padx=15)
-
-        prompt_title_frame = tk.Frame(card_whisper, bg=CARD_BG, padx=15, pady=5)
-        prompt_title_frame.pack(fill="x", pady=(5, 2))
-        tk.Label(prompt_title_frame, text="Prompt Auxiliar Fixo", font=("Segoe UI Semibold", 9), fg=TEXT_COLOR, bg=CARD_BG).pack(anchor="w")
-        tk.Label(prompt_title_frame, text="Ensina vocabulário específico, termos técnicos ou regras de formatação adicionais.", font=("Segoe UI", 8), fg=MUTED_COLOR, bg=CARD_BG).pack(anchor="w")
-
-        self.prompt_text = tk.Text(card_whisper, height=3, bg=INPUT_BG, fg=TEXT_COLOR, font=("Segoe UI", 9), relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_COLOR, insertbackground=TEXT_COLOR)
-        self.prompt_text.pack(fill="x", padx=15, pady=(5, 15))
-        self.prompt_text.insert("1.0", getattr(self.current_config, "initial_prompt", "") or "")
-
-        # --- Card 2: Pós-Processamento & Estilos ---
-        card_ai = self._create_card(frame, "Pós-Processamento & Estilos")
-
-        row_tone = self._create_card_row(card_ai, "Estilo da Transcrição", "Tom de voz e formatação do ditado final pós-reescrita.")
-
-        default_tones = ["natural", "formal", "developer"]
-        custom_tones_keys = list(getattr(self.current_config, "custom_tones", {}).keys())
-        all_tones = default_tones + custom_tones_keys
-        if self.tone_var.get() not in all_tones:
-            all_tones.append(self.tone_var.get())
-
-        tone_control_frame = tk.Frame(row_tone, bg=CARD_BG)
-        tone_control_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.tone_combo = ModernDropdown(tone_control_frame, variable=self.tone_var, values=all_tones, width=15)
-        self.tone_combo.pack(side="left", padx=(0, 5))
-
-        edit_btn = tk.Button(tone_control_frame, text="✏️ Editar Estilos", bg=INPUT_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI", 9),
-            relief="flat", bd=0, padx=10, pady=2, cursor="hand2", command=self._open_styles_editor)
-        edit_btn.pack(side="left")
-
-        self.tone_desc_label = tk.Label(card_ai, text="", font=("Segoe UI Italic", 8), fg=MUTED_COLOR, bg=CARD_BG, justify="left", anchor="w", padx=15, pady=5)
-        self.tone_desc_label.pack(fill="x", pady=(0, 5))
-
-        def update_tone_desc(*args):
-            tone = self.tone_var.get()
-            desc_map = {
-                "natural": "Tom Natural: Corrige erros ortográficos/gramaticais mantendo a coloquialidade original.",
-                "formal": "Tom Formal: Reescreve formalmente o ditado, ideal para e-mails e documentos profissionais.",
-                "developer": "Tom Desenvolvedor: Mantém jargões de código e termos técnicos em inglês intactos."
-            }
-            desc = desc_map.get(tone, f"Tom Customizado '{tone}': Utiliza as suas regras personalizadas de reescrita.")
-            self.tone_desc_label.configure(text=desc)
-
-        self.tone_var.trace_add("write", update_tone_desc)
-        update_tone_desc()
-
-        row_rewriter = self._create_card_row(card_ai, "Pós-Processamento Inteligente", "Aplica o estilo de tom reescrevendo o texto via LLM offline local.")
-        self._create_toggle(row_rewriter, self.rewriter_var, command=self._on_rewriter_toggled)
-
-        self.llm_status_frame = tk.Frame(card_ai, bg=CARD_BG)
-        self.llm_status_frame.pack(fill="x", padx=15, pady=(0, 10))
-        self.llm_status_label = tk.Label(self.llm_status_frame, text="", font=("Segoe UI Semibold", 8), bg=CARD_BG, anchor="w")
-        self.llm_status_label.pack(side="left")
-
-        self.download_llm_btn = tk.Button(
-            self.llm_status_frame, text="Baixar Mini-LLM (~400MB)", bg=ACCENT_COLOR, fg="#ffffff",
-            activebackground=ACCENT_HOVER, activeforeground="#ffffff", font=("Segoe UI Bold", 8),
-            relief="flat", bd=0, padx=10, pady=2, cursor="hand2", command=self._download_llm_model
+    def _styled_text(self, parent: tk.Widget, height: int = 4) -> tk.Text:
+        t = self.theme
+        return tk.Text(
+            parent, height=height, bg=t.input_bg, fg=t.text, font=(self.font_name, 10),
+            relief="flat", bd=0, highlightthickness=1,
+            highlightbackground=t.border, highlightcolor=t.accent,
+            insertbackground=t.text, wrap="word",
         )
 
-        # row_aimode = self._create_card_row(card_ai, "Modo Agente IA", "Executa o ditado interpretando-o como comandos ou ações para a IA.")
-        # self._create_toggle(row_aimode, self.ai_mode_var)
-
-        row_learn = self._create_card_row(card_ai, "Aprendizado Contínuo", "Aprende e prioriza o vocabulário das suas notas diárias salvas.")
-        self._create_toggle(row_learn, self.learning_var)
-
-        # --- Card 3: Microfone & Áudio ---
-        card_audio = self._create_card(frame, "Microfone & Captação")
-
-        row_mic = self._create_card_row(card_audio, "Microfone Padrão", "Dispositivo de áudio utilizado para capturar sua voz.")
-        current_mic = self.current_config.audio_device or "Padrão do Sistema"
-        devices = ["Padrão do Sistema"]
-        if current_mic != "Padrão do Sistema":
-            devices.append(current_mic)
-        self.mic_combo = ModernDropdown(row_mic, variable=self.mic_var, values=devices, width=22)
-        self.mic_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        # Busca microfones em segundo plano
-        def load_devices():
-            try:
-                import sounddevice as sd
-                found_devices = ["Padrão do Sistema"]
-                for d in sd.query_devices():
-                    if d.get('max_input_channels', 0) > 0:
-                        name = d['name']
-                        if name not in found_devices:
-                            found_devices.append(name)
-                if current_mic not in found_devices:
-                    found_devices.append(current_mic)
-                self.after(0, lambda: self.mic_combo.configure_values(found_devices))
-            except Exception:
-                pass
-        threading.Thread(target=load_devices, daemon=True).start()
-
-        # Teste do microfone
-        row_test = self._create_card_row(card_audio, "Teste do Microfone", "Verifique o volume do sinal de entrada captado em tempo real.")
-
-        test_control_frame = tk.Frame(row_test, bg=CARD_BG)
-        test_control_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.meter_canvas = tk.Canvas(test_control_frame, width=160, height=18, bg=INPUT_BG, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        self.meter_canvas.pack(side="left", padx=(0, 10))
-        self.meter_bar = self.meter_canvas.create_rectangle(1, 1, 1, 17, fill=ACCENT_COLOR, outline="")
-
-        self.test_btn = tk.Button(
-            test_control_frame, text="Iniciar Teste", bg=CANCEL_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI Semibold", 9),
-            relief="flat", bd=0, padx=12, pady=4, cursor="hand2", command=self._toggle_test_stream
-        )
-        self.test_btn.pack(side="left")
-
-        row_enhance = self._create_card_row(card_audio, "Aprimorar Áudio", "Aplica redução de ruídos espectral e normalização de voz.")
-        self._create_toggle(row_enhance, self.audio_enhance_var)
-
-        row_profile = self._create_card_row(card_audio, "Perfil de Aprimoramento", "Nível de pré-processamento (Rápido, Equilibrado, Máxima Qualidade).")
-        self.profile_combo = ModernDropdown(
-            row_profile,
-            variable=self.audio_enhance_profile_var,
-            values=list(self._profile_id_map.keys()),
-            width=25
-        )
-        self.profile_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        # Verificar disponibilidade sem importar Torch/SciPy. Esses imports custam
-        # vários segundos e faziam o clique no menu da bandeja parecer travado.
-        nr_ok = (
-            importlib.util.find_spec("noisereduce") is not None
-            and importlib.util.find_spec("scipy") is not None
-        )
-        status_text = "   ✓ Filtros inteligentes de ruído ativados" if nr_ok else "   ⚠ noisereduce não instalado. Execute: pip install noisereduce scipy"
-        status_color = SUCCESS_COLOR if nr_ok else "#f0a500"
-        lbl_status = tk.Label(card_audio, text=status_text, font=("Segoe UI Italic", 8), fg=status_color, bg=CARD_BG, anchor="w", padx=15, pady=5)
-        lbl_status.pack(fill="x", pady=(0, 10))
-
-        row_vad = self._create_card_row(card_audio, "Detecção de Fala (VAD)", "Identifica pausas naturais na voz para segmentar chunks de fala.")
-        silero_ok = (
-            importlib.util.find_spec("torch") is not None
-            and importlib.util.find_spec("silero_vad") is not None
-        )
-        vad_text = "✓ Silero VAD (alta qualidade)" if silero_ok else "⚠ Energy VAD (fallback básico)"
-        vad_color = SUCCESS_COLOR if silero_ok else "#f0a500"
-        tk.Label(row_vad, text=vad_text, font=("Segoe UI Bold", 8), fg=vad_color, bg=CARD_BG).grid(row=0, column=1, sticky="e", padx=10)
-
-        row_silence = self._create_card_row(card_audio, "Silêncio para Corte", "Tempo necessário de silêncio para a IA separar blocos de ditado.")
-        self._silence_combo = ModernDropdown(
-            row_silence,
-            variable=tk.StringVar(value=str(self.min_silence_var.get()) + "ms"),
-            values=["250ms", "350ms", "500ms", "700ms"],
-            width=12,
-        )
-        self._silence_combo.grid(row=0, column=1, sticky="e", padx=10)
-        self._silence_combo.bind("<<ComboboxSelected>>",
-            lambda e: self.min_silence_var.set(int(self._silence_combo.get().replace("ms", ""))))
-
-        row_stream = self._create_card_row(card_audio, "Modo Streaming Contínuo", "Transcreve chunks menores em tempo real conforme você dita.")
-        self._create_toggle(row_stream, self.streaming_var)
-
-        row_literal = self._create_card_row(card_audio, "Transcrição Literal", "Preserva palavras, repetições e hesitações sem reescrita automática.")
-        self._create_toggle(row_literal, self.literal_mode_var)
-
-        row_punctuation = self._create_card_row(card_audio, "Pontuação Inteligente", "Usa perguntas e pausas da fala para pontuar sem trocar palavras.")
-        self._create_toggle(row_punctuation, self.punctuation_assist_var)
-
-        row_stutters = self._create_card_row(card_audio, "Remover Repetições", "Limpa gagueiras e palavras duplicadas consecutivas.")
-        self._create_toggle(row_stutters, self.remove_stutters_var)
-
-        row_fillers = self._create_card_row(card_audio, "Remover Hesitações (Fillers)", "Remove automaticamente sons como 'hmm', 'ãh', 'eh'.")
-        self._create_toggle(row_fillers, self.remove_fillers_var)
-
-        row_cf = self._create_card_row(card_audio, "Hesitações Personalizadas", "Termos separados por vírgula para remoção automática.")
-        self.custom_fillers_entry = self._create_styled_entry(row_cf, "")
-        self.custom_fillers_entry.grid(row=0, column=1, sticky="e", padx=10)
-        custom_fillers_val = getattr(self.current_config, "custom_fillers", "")
-        self.custom_fillers_entry.delete(0, "end")
-        self.custom_fillers_entry.insert(0, custom_fillers_val)
-
-        self._on_model_changed()
-        self._on_rewriter_toggled()
-
-        return frame
-
-    # ------------------ PAINEL 2: PREFERÊNCIAS & ATALHOS ------------------
-    def _build_preferences_panel(self, parent: tk.Widget) -> tk.Frame:
-        frame = tk.Frame(parent, bg=BG_COLOR)
-        self._build_header(frame, "Preferências & Atalhos", "Ajustes de atalhos globais de teclado, sons e estilo visual da interface.")
-
-        self._atom_color_val = getattr(self.current_config, "atom_color", "#FF6000")
-
-        # --- Card 1: Atalhos Globais ---
-        card_hotkeys = self._create_card(frame, "Atalhos Globais do Teclado")
-
-        row_normal = self._create_card_row(card_hotkeys, "Ditado Normal", "Inicia a gravação e insere o texto diretamente no cursor do sistema.")
-        self.hotkey_normal_entry = self._create_styled_entry(row_normal, self.current_config.hotkey)
-        self.hotkey_normal_entry.grid(row=0, column=1, sticky="e", padx=10)
-
-        row_trans = self._create_card_row(card_hotkeys, "Ditado + Traduzir", "Inicia gravação, traduz a fala para o inglês e cola o resultado.")
-        hk_tr = getattr(self.current_config, "hotkey_translate", "Ctrl+Alt+Space")
-        self.hotkey_translate_entry = self._create_styled_entry(row_trans, hk_tr)
-        self.hotkey_translate_entry.grid(row=0, column=1, sticky="e", padx=10)
-
-        row_send = self._create_card_row(card_hotkeys, "Ditado + Enviar", "Cola o texto ditado e pressiona a tecla Enter automaticamente.")
-        hk_as = getattr(self.current_config, "hotkey_auto_send", "Ctrl+Shift+Space")
-        self.hotkey_auto_send_entry = self._create_styled_entry(row_send, hk_as)
-        self.hotkey_auto_send_entry.grid(row=0, column=1, sticky="e", padx=10)
-
-        row_brain = self._create_card_row(card_hotkeys, "Ditado + Quantum Brain", "Grava o áudio e envia diretamente para o banco de notas do Quantum Brain.")
-        hk_qb = getattr(self.current_config, "hotkey_quantum_brain", "Ctrl+Shift+D")
-        self.hotkey_quantum_brain_entry = self._create_styled_entry(row_brain, hk_qb)
-        self.hotkey_quantum_brain_entry.grid(row=0, column=1, sticky="e", padx=10)
-
-        note_frame = tk.Frame(card_hotkeys, bg=CARD_BG, padx=15, pady=5)
-        note_frame.pack(fill="x", pady=(0, 7))
-        tk.Label(note_frame, text="💡 Atalho Fixo: Tecla ESC cancela a gravação e fecha o HUD imediatamente.", font=("Segoe UI Italic", 8), fg=MUTED_COLOR, bg=CARD_BG, anchor="w").pack(fill="x")
-
-        # --- Card 2: Interface & HUD ---
-        card_hud = self._create_card(frame, "Interface & HUD")
-
-        row_paste = self._create_card_row(card_hud, "Colar Automatically", "Digita o texto no cursor do sistema logo após terminar o ditado.")
-        self._create_toggle(row_paste, self.paste_var)
-
-        row_theme = self._create_card_row(card_hud, "Animação do HUD", "Estilo visual que indica que a gravação está ativa.")
-        theme_combo = ttk.Combobox(
-            row_theme, textvariable=self.hud_theme_var,
-            values=list(self._theme_id_map.keys()),
-            state="readonly", width=22
-        )
-        theme_combo.grid(row=0, column=1, sticky="e", padx=10)
-
-        self._atom_color_row = self._create_card_row(card_hud, "Cor do Átomo", "Selecione a cor de destaque da animação do átomo.")
-
-        color_control_frame = tk.Frame(self._atom_color_row, bg=CARD_BG)
-        color_control_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self._atom_color_preview = tk.Label(
-            color_control_frame, text="  ",
-            bg=self._atom_color_val, width=3, relief="flat", cursor="hand2"
-        )
-        self._atom_color_preview.pack(side="left", padx=(0, 5))
-
-        self._atom_color_label = tk.Label(
-            color_control_frame, text=self._atom_color_val.upper(),
-            font=("Segoe UI", 9), fg=MUTED_COLOR, bg=CARD_BG, cursor="hand2"
-        )
-        self._atom_color_label.pack(side="left")
-
-        self._atom_color_preview.bind("<Button-1>", lambda _: self._pick_atom_color())
-        self._atom_color_label.bind("<Button-1>", lambda _: self._pick_atom_color())
-
-        theme_combo.bind("<<ComboboxSelected>>", lambda _: self._toggle_atom_color_row())
-        self._toggle_atom_color_row()
-
-        # --- Card 3: Efeitos Sonoros ---
-        card_sounds = self._create_card(frame, "Efeitos Sonoros")
-
-        row_sounds = self._create_card_row(card_sounds, "Efeitos Sonoros", "Tocar bip sonoro ao iniciar e pausar o ditado.")
-        self._create_toggle(row_sounds, self.sounds_var, command=self._toggle_volume_slider)
-
-        self.volume_row = self._create_card_row(card_sounds, "Volume dos Efeitos", "Ajuste a intensidade do som de notificação.")
-
-        self.volume_slider = tk.Scale(
-            self.volume_row, from_=0.0, to=1.0, resolution=0.05, orient="horizontal",
-            variable=self.sound_volume_var,
-            bg=CARD_BG, fg=TEXT_COLOR, troughcolor=INPUT_BG, activebackground=ACCENT_COLOR,
-            highlightthickness=0, bd=0, showvalue=True, length=180, font=("Segoe UI", 8)
-        )
-        self.volume_slider.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.volume_label = tk.Label(self.volume_row, text="", font=("Segoe UI", 1), bg=CARD_BG) # Ref oculta
-        self._toggle_volume_slider()
-
-        return frame
-
-    # ------------------ PAINEL 3: SISTEMA & NOTAS ------------------
-    def _build_system_notes_panel(self, parent: tk.Widget) -> tk.Frame:
-        frame = tk.Frame(parent, bg=BG_COLOR)
-        self._build_header(frame, "Sistema, Notas & Backups", "Ajustes do Quantum Brain, backups de segurança e histórico de transcrições.")
-
-        self.code_only_var = tk.BooleanVar(value=True)
-
-        # --- Card 1: Quantum Brain ---
-        card_brain = self._create_card(frame, "Segundo Cérebro (Quantum Brain)")
-
-        row_brain_on = self._create_card_row(card_brain, "Habilitar Quantum Brain", "Captura pensamentos ditados e os compila periodicamente.")
-        self._create_toggle(row_brain_on, self.quantum_brain_enabled_var)
-
-        row_brain_paste = self._create_card_row(card_brain, "Também Colar no Cursor", "Insere a transcrição no cursor imediatamente após criar a nota.")
-        self._create_toggle(row_brain_paste, self.quantum_brain_also_paste_var)
-
-        row_interval = self._create_card_row(card_brain, "Intervalo de Síntese", "Tempo máximo (em minutos) para condensar notas ativas.")
-        self.sync_interval_spin = tk.Spinbox(
-            row_interval, from_=15, to=240, increment=5, textvariable=self.quantum_brain_sync_interval_var,
-            bg=INPUT_BG, fg=TEXT_COLOR, buttonbackground=INPUT_BG, relief="flat", bd=0,
-            highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_COLOR,
-            insertbackground=TEXT_COLOR, font=("Segoe UI", 9), width=10
-        )
-        self.sync_interval_spin.grid(row=0, column=1, sticky="e", padx=10)
-
-        row_threshold = self._create_card_row(card_brain, "Quantidade Limite de Notas", "Quantidade de notas pendentes necessárias para gerar uma síntese.")
-        self.sync_threshold_spin = tk.Spinbox(
-            row_threshold, from_=3, to=50, increment=1, textvariable=self.quantum_brain_sync_threshold_var,
-            bg=INPUT_BG, fg=TEXT_COLOR, buttonbackground=INPUT_BG, relief="flat", bd=0,
-            highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_COLOR,
-            insertbackground=TEXT_COLOR, font=("Segoe UI", 9), width=10
-        )
-        self.sync_threshold_spin.grid(row=0, column=1, sticky="e", padx=10)
-
-        stats_frame = tk.Frame(card_brain, bg=CARD_BG, padx=15, pady=8)
-        stats_frame.pack(fill="x")
-        self.stats_label = tk.Label(
-            stats_frame, text="Carregando estatísticas...",
-            font=("Segoe UI", 9), fg=TEXT_COLOR, bg=CARD_BG, justify="left", anchor="w"
-        )
-        self.stats_label.pack(anchor="w", fill="x")
-
-        row_brain_actions = self._create_card_row(card_brain, "Ferramentas do Banco", "Gerencie o diretório de notas ou inicie a consolidação manual.")
-
-        brain_actions_frame = tk.Frame(row_brain_actions, bg=CARD_BG)
-        brain_actions_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        open_folder_btn = tk.Button(
-            brain_actions_frame, text="🔍 Abrir Pasta", bg=INPUT_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._open_quantum_brain_folder
-        )
-        open_folder_btn.pack(side="left", padx=(0, 5))
-
-        synthesize_btn = tk.Button(
-            brain_actions_frame, text="⚡ Sintetizar Agora", bg=ACCENT_COLOR, fg="#ffffff",
-            activebackground=ACCENT_HOVER, activeforeground="#ffffff", font=("Segoe UI Semibold", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._trigger_manual_synthesis
-        )
-        synthesize_btn.pack(side="left")
-
-        # --- Card 2: Histórico de Transcrições ---
-        card_logs = self._create_card(frame, "Histórico de Transcrições")
-
-        row_logs_dir = self._create_card_row(card_logs, "Logs de Transcrição", f"Caminho absoluto: {diary_dir()}")
-
-        open_logs_btn = tk.Button(
-            row_logs_dir, text="Abrir Pasta 📂", bg=INPUT_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI", 8),
-            relief="flat", bd=0, padx=10, cursor="hand2", command=lambda: os.startfile(diary_dir())
-        )
-        open_logs_btn.grid(row=0, column=1, sticky="e", padx=10)
-
-        log_view_frame = tk.Frame(card_logs, bg=INPUT_BG, highlightthickness=1, highlightbackground=BORDER_COLOR, bd=0)
-        log_view_frame.pack(fill="x", padx=15, pady=(5, 10))
-
-        self.logs_text = tk.Text(log_view_frame, height=5, bg=INPUT_BG, fg=TEXT_COLOR, font=("Segoe UI", 9), relief="flat", bd=0, state="disabled")
-        scrollbar = ttk.Scrollbar(log_view_frame, command=self.logs_text.yview)
-        self.logs_text.configure(yscrollcommand=scrollbar.set)
-
-        self.logs_text.tag_config("link", foreground=ACCENT_COLOR, underline=True)
-        self.logs_text.tag_bind("link", "<Enter>", lambda _: self.logs_text.config(cursor="hand2"))
-        self.logs_text.tag_bind("link", "<Leave>", lambda _: self.logs_text.config(cursor=""))
-        self.logs_text.tag_bind("link", "<Button-1>", self._on_transcription_clicked)
-
-        self.logs_text.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-        scrollbar.pack(side="right", fill="y")
-
-        row_del_logs = self._create_card_row(card_logs, "Apagar Logs", "Apagar todos os históricos salvos permanentemente.")
-
-        delete_logs_btn = tk.Button(
-            row_del_logs, text="🗑 Apagar Todas as Transcrições", bg=CANCEL_BG, fg=DANGER_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=DANGER_COLOR, font=("Segoe UI Semibold", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._delete_all_transcriptions
-        )
-        delete_logs_btn.grid(row=0, column=1, sticky="e", padx=10)
-
-        # --- Card 3: Backup & Restauração ---
-        card_backup = self._create_card(frame, "Backup e Restauração")
-
-        row_backup_actions = self._create_card_row(card_backup, "Ferramentas de Backup", "Gere novos backups zip ou selecione arquivos locais.")
-
-        backup_ctrl_frame = tk.Frame(row_backup_actions, bg=CARD_BG)
-        backup_ctrl_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.chk_code_only = tk.Checkbutton(
-            backup_ctrl_frame, text="Apenas Código",
-            variable=self.code_only_var, bg=CARD_BG, fg=TEXT_COLOR,
-            activebackground=CARD_BG, activeforeground=TEXT_COLOR,
-            selectcolor=INPUT_BG, font=("Segoe UI", 9)
-        )
-        self.chk_code_only.pack(side="left", padx=(0, 10))
-
-        self.btn_create_backup = tk.Button(
-            backup_ctrl_frame, text="Criar Backup 💾", bg=ACCENT_COLOR, fg="#ffffff",
-            activebackground=ACCENT_HOVER, activeforeground="#ffffff", font=("Segoe UI Bold", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._on_create_backup_clicked
-        )
-        self.btn_create_backup.pack(side="left", padx=(0, 5))
-
-        self.btn_restore_file = tk.Button(
-            backup_ctrl_frame, text="Restaurar de Arquivo... 📂", bg=CANCEL_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI Semibold", 9),
-            relief="flat", bd=0, padx=12, pady=6, cursor="hand2", command=self._on_restore_file_clicked
-        )
-        self.btn_restore_file.pack(side="left")
-
-        table_frame = tk.Frame(card_backup, bg=INPUT_BG, highlightthickness=1, highlightbackground=BORDER_COLOR)
-        table_frame.pack(fill="x", padx=15, pady=(5, 10))
-
-        columns = ("filename", "type", "version", "datetime", "size")
-        self.backup_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=4)
-        self.backup_tree.heading("filename", text="Arquivo")
-        self.backup_tree.heading("type", text="Tipo")
-        self.backup_tree.heading("version", text="Versão")
-        self.backup_tree.heading("datetime", text="Data/Hora")
-        self.backup_tree.heading("size", text="Tamanho")
-
-        self.backup_tree.column("filename", width=150, minwidth=100)
-        self.backup_tree.column("type", width=90, minwidth=70, anchor="center")
-        self.backup_tree.column("version", width=60, minwidth=40, anchor="center")
-        self.backup_tree.column("datetime", width=120, minwidth=90, anchor="center")
-        self.backup_tree.column("size", width=70, minwidth=50, anchor="e")
-
-        scrollbar_bk = ttk.Scrollbar(table_frame, orient="vertical", command=self.backup_tree.yview)
-        self.backup_tree.configure(yscrollcommand=scrollbar_bk.set)
-
-        self.backup_tree.pack(side="left", fill="both", expand=True)
-        scrollbar_bk.pack(side="right", fill="y")
-
-        row_backup_table_ctrl = self._create_card_row(card_backup, "Ações de Backup Selecionado", "Gerencie o backup atualmente selecionado na tabela acima.")
-
-        backup_table_ctrl_frame = tk.Frame(row_backup_table_ctrl, bg=CARD_BG)
-        backup_table_ctrl_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        self.btn_restore_selected = tk.Button(
-            backup_table_ctrl_frame, text="Restaurar Selecionado 🔄", bg=CANCEL_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI Semibold", 8),
-            relief="flat", bd=0, padx=12, pady=5, cursor="hand2", command=self._on_restore_selected_clicked
-        )
-        self.btn_restore_selected.pack(side="left", padx=(0, 5))
-
-        self.btn_delete_selected = tk.Button(
-            backup_table_ctrl_frame, text="Excluir Selecionado 🗑", bg=CANCEL_BG, fg=DANGER_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=DANGER_COLOR, font=("Segoe UI Semibold", 8),
-            relief="flat", bd=0, padx=12, pady=5, cursor="hand2", command=self._on_delete_selected_clicked
-        )
-        self.btn_delete_selected.pack(side="left")
-        self._backup_items_map = {}
-
-        return frame
-
-    # ------------------ PAINEL 4: SOBRE ------------------
-    def _build_about_panel(self, parent: tk.Widget) -> tk.Frame:
-        frame = tk.Frame(parent, bg=BG_COLOR)
-        self._build_header(frame, "Sobre o Quantum Scribe", "Informações da versão e recursos adicionais da aplicação.")
-
-        # --- Card 1: Identidade do Aplicativo ---
-        card_identity = self._create_card(frame)
-
-        # Grid para logo e textos principais do Sobre
-        row_id = tk.Frame(card_identity, bg=CARD_BG, padx=15, pady=15)
-        row_id.pack(fill="x")
-        row_id.columnconfigure(0, weight=0)
-        row_id.columnconfigure(1, weight=1)
-
-        # Pequeno canvas para desenhar logo reescalado do átomo
-        logo_canvas = tk.Canvas(row_id, width=64, height=64, bg=CARD_BG, bd=0, highlightthickness=0)
-        logo_canvas.grid(row=0, column=0, sticky="nw", padx=(0, 15))
-
-        # Carrega e redimensiona ícone em cache
-        self._logo_photo_small = ImageTk.PhotoImage(self._icon_img.resize((64, 64), Image.Resampling.LANCZOS))
-        logo_canvas.create_image(32, 32, image=self._logo_photo_small)
-
-        text_block = tk.Frame(row_id, bg=CARD_BG)
-        text_block.grid(row=0, column=1, sticky="nw")
-
-        from . import __version__
-        tk.Label(text_block, text="Quantum Scribe", font=("Segoe UI Bold", 16), fg=TEXT_COLOR, bg=CARD_BG).pack(anchor="w")
-        tk.Label(text_block, text=f"Versão Oficial {__version__}", font=("Segoe UI Semibold", 10), fg=ACCENT_COLOR, bg=CARD_BG).pack(anchor="w", pady=(2, 4))
-        tk.Label(text_block, text="Transcrição de voz privada e offline com inteligência artificial.", font=("Segoe UI", 9), fg=MUTED_COLOR, bg=CARD_BG).pack(anchor="w")
-
-        # --- Card 2: Detalhes do Sistema ---
-        card_system = self._create_card(frame, "Detalhes do Sistema")
-
-        import sys
-        row_python = self._create_card_row(card_system, "Interpretador Python", "Versão do interpretador sendo utilizado pela aplicação.")
-        tk.Label(row_python, text=sys.version.split(" ")[0], font=("Segoe UI Bold", 9), fg=TEXT_COLOR, bg=CARD_BG).grid(row=0, column=1, sticky="e", padx=10)
-
-        row_tcl = self._create_card_row(card_system, "Versão do Tk/Tcl", "Versão gráfica do motor Tk/Tcl sendo utilizado pelo Tkinter.")
-        tk.Label(row_tcl, text=str(self.tk.call("info", "patchlevel")), font=("Segoe UI Bold", 9), fg=TEXT_COLOR, bg=CARD_BG).grid(row=0, column=1, sticky="e", padx=10)
-
-        row_root = self._create_card_row(card_system, "Diretório de Instalação", "Localização absoluta da pasta contendo o código fonte.")
-        path_lbl = tk.Label(row_root, text=str(Path(get_project_root()).name), font=("Segoe UI Bold", 9), fg=MUTED_COLOR, bg=CARD_BG)
-        path_lbl.grid(row=0, column=1, sticky="e", padx=10)
-        # Ao passar o mouse exibe caminho inteiro como tooltip
-        path_lbl.bind("<Enter>", lambda _: path_lbl.configure(text=str(get_project_root()), fg=TEXT_COLOR))
-        path_lbl.bind("<Leave>", lambda _: path_lbl.configure(text=str(Path(get_project_root()).name), fg=MUTED_COLOR))
-
-        # --- Card 3: Recursos e Suporte ---
-        card_links = self._create_card(frame, "Recursos & Links Úteis")
-
-        row_links = self._create_card_row(card_links, "Links de Desenvolvimento", "Acesse a pasta de desenvolvimento ou repositórios locais.")
-
-        links_frame = tk.Frame(row_links, bg=CARD_BG)
-        links_frame.grid(row=0, column=1, sticky="e", padx=10)
-
-        open_folder_btn = tk.Button(
-            links_frame, text="Abrir Pasta do Projeto 📂", bg=INPUT_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI", 9),
-            relief="flat", bd=0, padx=12, pady=5, cursor="hand2", command=lambda: os.startfile(get_project_root())
-        )
-        open_folder_btn.pack(side="left", padx=(0, 5))
-
-        tk.Label(
-            card_links,
-            text="Desenvolvido por Natan Melquiades.\nQuantum Scribe utiliza CTranslate2, faster-whisper e sounddevice.",
-            font=("Segoe UI Italic", 8), fg=MUTED_COLOR, bg=CARD_BG, justify="center", anchor="center", pady=10
-        ).pack(fill="x")
-
-        return frame
-
-    def _toggle_volume_slider(self) -> None:
-        state = "normal" if self.sounds_var.get() else "disabled"
-        color = TEXT_COLOR if self.sounds_var.get() else MUTED_COLOR
-        self.volume_slider.configure(state=state, fg=color)
-
-    def _toggle_atom_color_row(self) -> None:
-        theme_val = self._theme_id_map.get(self.hud_theme_var.get(), "dots")
-        is_atom = theme_val in ("atom", "atom_compact", "atom_centered")
-        if is_atom:
-            self._atom_color_row.pack(fill="x")
-        else:
-            self._atom_color_row.pack_forget()
-
-    def _pick_atom_color(self) -> None:
-        from tkinter import colorchooser
-        result = colorchooser.askcolor(
-            color=self._atom_color_val,
-            title="Escolha a cor do átomo",
-            parent=self,
-        )
-        if result and result[1]:
-            chosen = result[1].upper()
-            self._atom_color_val = chosen
-            self._atom_color_preview.configure(bg=chosen)
-            self._atom_color_label.configure(text=chosen)
-
-    def _open_styles_editor(self):
-        editor = tk.Toplevel(self)
-        editor.title("Editor de Estilos de Inteligência")
-        editor.configure(bg=BG_COLOR)
-        editor.geometry("600x450")
-        editor.transient(self)
-        editor.grab_set()
-
-        tk.Label(editor, text="Configuração de Perfis e Tons", font=("Segoe UI Bold", 12), fg=TEXT_COLOR, bg=BG_COLOR).pack(pady=(15, 5))
-
-        list_frame = tk.Frame(editor, bg=BG_COLOR)
-        list_frame.pack(fill="x", padx=20, pady=5)
-
-        tk.Label(list_frame, text="Selecione um Estilo:", font=("Segoe UI", 9), fg=TEXT_COLOR, bg=BG_COLOR).pack(side="left")
-
-        style_var = tk.StringVar()
-        style_combo = ModernDropdown(list_frame, variable=style_var, values=self.tone_combo.values, width=20)
-        style_combo.pack(side="left", padx=10)
-
-        tk.Label(editor, text="Prompt Auxiliar do Whisper (Vocabulário / Regras)", font=("Segoe UI Semibold", 9), fg=TEXT_COLOR, bg=BG_COLOR).pack(anchor="w", padx=20, pady=(15, 2))
-        whisper_text = tk.Text(editor, height=3, bg=INPUT_BG, fg=TEXT_COLOR, font=("Segoe UI", 9), relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_COLOR)
-        whisper_text.pack(fill="x", padx=20)
-
-        tk.Label(editor, text="Instrução do Mini-LLM (Comportamento de Reescrita)", font=("Segoe UI Semibold", 9), fg=TEXT_COLOR, bg=BG_COLOR).pack(anchor="w", padx=20, pady=(15, 2))
-        llm_text = tk.Text(editor, height=4, bg=INPUT_BG, fg=TEXT_COLOR, font=("Segoe UI", 9), relief="flat", highlightthickness=1, highlightbackground=BORDER_COLOR, highlightcolor=ACCENT_COLOR)
-        llm_text.pack(fill="x", padx=20)
-
-        default_whisper_prompts = {
-            "natural": "",
-            "formal": "Linguagem formal, regras cultas.",
-            "developer": "Desenvolvedor de software, termos em inglês, camelCase, Python, React."
-        }
-        default_llm_prompts = {
-            "natural": "Corrija ortografia, acentuação e pontuação básicas. Mantenha 100% das palavras originais, a estrutura e a coloquialidade do ditado.",
-            "formal": "Reescreva com linguagem formal, profissional e vocabulário empresarial. Corrija a gramática e remova gírias.",
-            "developer": "Mantenha os jargões de programação em inglês e corrija a estrutura do texto para ficar claro e técnico."
-        }
-
-        def load_style():
-            sel = style_var.get()
-            whisper_text.delete("1.0", "end")
-            llm_text.delete("1.0", "end")
-
-            if sel in self.current_config.custom_tones:
-                whisper_text.insert("1.0", self.current_config.custom_tones[sel])
-            else:
-                whisper_text.insert("1.0", default_whisper_prompts.get(sel, ""))
-
-            if sel in self.current_config.llm_custom_tones:
-                llm_text.insert("1.0", self.current_config.llm_custom_tones[sel])
-            else:
-                llm_text.insert("1.0", default_llm_prompts.get(sel, "Reescreva o texto com clareza."))
-
-        style_combo.command = load_style
-
-        if self.tone_var.get() in self.tone_combo.values:
-            style_var.set(self.tone_var.get())
-            load_style()
-
-        def create_new_style():
-            from tkinter import simpledialog
-            new_name = simpledialog.askstring("Novo Estilo", "Nome do novo perfil de estilo:", parent=editor)
-            if new_name and new_name.strip():
-                new_name = new_name.strip()
-                if new_name not in self.tone_combo.values:
-                    new_values = self.tone_combo.values + [new_name]
-                    self.tone_combo.configure_values(new_values)
-                    style_combo.configure_values(new_values)
-                style_var.set(new_name)
-                load_style()
-
-        def save_and_close():
-            sel = style_var.get()
-            if sel:
-                w_prompt = whisper_text.get("1.0", "end-1c").strip()
-                l_prompt = llm_text.get("1.0", "end-1c").strip()
-                self.current_config.custom_tones[sel] = w_prompt
-                self.current_config.llm_custom_tones[sel] = l_prompt
-                self.tone_var.set(sel)
-            editor.destroy()
-
-        btn_frame = tk.Frame(editor, bg=BG_COLOR)
-        btn_frame.pack(fill="x", side="bottom", pady=20, padx=20)
-
-        tk.Button(btn_frame, text="Novo Estilo", command=create_new_style, bg=INPUT_BG, fg=TEXT_COLOR, relief="flat", padx=10).pack(side="left")
-        tk.Button(btn_frame, text="Salvar Modificações", command=save_and_close, bg=ACCENT_COLOR, fg="#ffffff", relief="flat", padx=15).pack(side="right")
-        tk.Button(btn_frame, text="Cancelar", command=editor.destroy, bg=CANCEL_BG, fg=TEXT_COLOR, relief="flat", padx=15).pack(side="right", padx=10)
-
-    def _on_model_changed(self, event: object = None) -> None:
-        friendly = self.model_name_var.get()
-        model_id = self.friendly_to_id.get(friendly, "medium")
-        model_info = MODELS_MAP.get(model_id)
-
-        self.model_desc_label = tk.Label(self.download_status_frame, text="", font=("Segoe UI", 8), fg=MUTED_COLOR, bg=CARD_BG)
-        self.model_desc_label.configure(text=model_info["desc"])
-
-        if is_model_downloaded(model_id):
-            self.download_status_label.configure(text="✓ Modelo Whisper baixado e pronto", fg=SUCCESS_COLOR)
-            self.download_btn.pack_forget()
-        else:
-            self.download_status_label.configure(
-                text="Download pendente — será instalado automaticamente ou pode baixar agora",
-                fg=DANGER_COLOR,
-            )
-            self.download_btn.pack(side="left", pady=(5, 0))
-
-    def _on_rewriter_toggled(self) -> None:
-        from .rewriter import is_rewriter_downloaded
-        repo_id = getattr(self.current_config, "llm_model_repo", "jncraton/Qwen2.5-0.5B-Instruct-ct2-int8")
-
-        if self.rewriter_var.get():
-            if is_rewriter_downloaded(repo_id):
-                self.llm_status_label.configure(text="✓ LLM offline disponível na máquina", fg=SUCCESS_COLOR)
-                self.download_llm_btn.pack_forget()
-            else:
-                self.llm_status_label.configure(text="⚠ Requer download do pacote de IA da LLM", fg=DANGER_COLOR)
-                self.download_llm_btn.pack(side="left", padx=10)
-        else:
-            self.llm_status_label.configure(text="")
-            self.download_llm_btn.pack_forget()
-
-    def _download_selected_model(self) -> None:
-        friendly = self.model_name_var.get()
-        model_id = self.friendly_to_id.get(friendly, "medium")
-
-        self._set_widgets_state("disabled")
-
-        self.download_btn.pack_forget()
-        self.download_progress_bar.pack(anchor="w", pady=(4, 5))
-        self.download_progress_var.set(0.0)
-        self.download_progress_bar.configure(mode="indeterminate")
-        self.download_progress_bar.start(10)
-        self.download_status_label.configure(text="Buscando metadados no Hugging Face...", fg=MUTED_COLOR)
-
-        def download_thread():
-            try:
-                from .model_manager import ensure_model_downloaded
-
-                ensure_model_downloaded(model_id)
-                def on_success():
-                    self.download_progress_bar.stop()
-                    self._set_widgets_state("normal")
-                    self.download_progress_bar.pack_forget()
-                    self._on_model_changed()
-                    self.error_label.configure(text=f"Modelo {friendly} baixado com sucesso!", fg=SUCCESS_COLOR)
-                self.after(0, on_success)
-            except Exception as error:
-                def on_failure(err=error):
-                    self.download_progress_bar.stop()
-                    self._set_widgets_state("normal")
-                    self.download_progress_bar.pack_forget()
-                    self._on_model_changed()
-                    self.error_label.configure(text=f"Falha ao baixar modelo: {err}", fg=DANGER_COLOR)
-                self.after(0, on_failure)
-
-        threading.Thread(target=download_thread, daemon=True).start()
-
-    def _download_llm_model(self) -> None:
-        repo_id = getattr(self.current_config, "llm_model_repo", "jncraton/Qwen2.5-0.5B-Instruct-ct2-int8")
-        self._set_widgets_state("disabled")
-
-        progress_win = tk.Toplevel(self)
-        progress_win.title("Baixando LLM...")
-        progress_win.configure(bg=BG_COLOR)
-        progress_win.resizable(False, False)
-        progress_win.grab_set()
-
-        pw, ph = 350, 120
-        px = self.winfo_x() + (self.winfo_width() - pw) // 2
-        py = self.winfo_y() + (self.winfo_height() - ph) // 2
-        progress_win.geometry(f"{pw}x{ph}+{px}+{py}")
-
-        tk.Label(progress_win, text="Baixando Mini-LLM (CT2)", font=("Segoe UI Semibold", 10), fg=TEXT_COLOR, bg=BG_COLOR, pady=10).pack()
-        status_lbl = tk.Label(progress_win, text="Baixando repositório HF...", font=("Segoe UI", 8), fg=MUTED_COLOR, bg=BG_COLOR)
-        status_lbl.pack()
-
-        prog_bar = ttk.Progressbar(progress_win, mode="indeterminate", length=300)
-        prog_bar.pack(pady=10)
-        prog_bar.start(10)
-
-        def callback(msg: str):
-            self.after(0, lambda: status_lbl.configure(text=msg))
-
-        def download_thread():
-            from .rewriter import download_rewriter_model
-            success = download_rewriter_model(repo_id, callback=callback)
-            if success:
-                def on_success():
-                    progress_win.destroy()
-                    self._set_widgets_state("normal")
-                    self._on_rewriter_toggled()
-                    self.error_label.configure(text="LLM baixado com sucesso!", fg=SUCCESS_COLOR)
-                self.after(1000, on_success)
-            else:
-                def on_failure():
-                    progress_win.destroy()
-                    self._set_widgets_state("normal")
-                    self._on_rewriter_toggled()
-                    self.error_label.configure(text="Falha ao baixar LLM.", fg=DANGER_COLOR)
-                self.after(1000, on_failure)
-
-        threading.Thread(target=download_thread, daemon=True).start()
-
-    def _toggle_test_stream(self) -> None:
-        if self._test_stream_active:
-            self._stop_test_stream()
-            self.test_btn.configure(text="Iniciar Teste", bg=CANCEL_BG, fg=TEXT_COLOR)
-            try:
-                self.meter_canvas.coords(self.meter_bar, 1, 1, 1, 17)
-            except Exception:
-                pass
-        else:
-            self._start_test_stream()
-            if self._test_stream:
-                self.test_btn.configure(text="Parar Teste", bg=ACCENT_COLOR, fg="#fff")
-                self._update_test_meter()
-
-    def _start_test_stream(self) -> None:
-        self._stop_test_stream()
-        from .audio import get_device_index_by_name
-        selected_name = self.mic_var.get()
-        device_index = get_device_index_by_name(selected_name)
-
-        import numpy as np
-        import sounddevice as sd
-
-        self._test_amplitude = 0.0
-        self._test_stream_active = True
-
-        def callback(indata, frames, time_info, status):
-            if not self._test_stream_active or status.input_overflow or len(indata) == 0:
-                return
-            rms = np.sqrt(np.mean(indata.astype(np.float32) ** 2))
-            self._test_amplitude = float(rms / 32768.0)
-
+    # ------------------------------------------------------------------
+    # Aplicação instantânea e comunicação
+    # ------------------------------------------------------------------
+
+    def _set(self, field: str, value, toast: str | None = None,
+             toast_kind: str = "success") -> None:
+        """Grava o campo na configuração e aplica imediatamente no app."""
+        setattr(self._cfg, field, value)
         try:
-            self._test_stream = sd.InputStream(device=device_index, samplerate=16000, channels=1, dtype="int16", callback=callback)
-            self._test_stream.start()
-        except Exception as error:
-            self.error_label.configure(text=f"Erro no microfone: {error}", fg=DANGER_COLOR)
-            self._test_stream = None
-            self._test_stream_active = False
-
-    def _stop_test_stream(self) -> None:
-        self._test_stream_active = False
-        if getattr(self, "_test_stream", None):
-            try:
-                self._test_stream.stop()
-                self._test_stream.close()
-            except Exception:
-                pass
-            self._test_stream = None
-
-    def _on_mic_changed(self, event: object = None) -> None:
-        if self._test_stream_active:
-            self._start_test_stream()
-
-    def _update_test_meter(self) -> None:
-        if not self._test_stream_active:
-            return
-        amp_clean = max(0.0, self._test_amplitude - 0.0015)
-        target_amp = min(1.0, amp_clean * 300.0)
-        self._smooth_level = self._smooth_level * 0.7 + target_amp * 0.3
-
-        try:
-            max_w = self.meter_canvas.winfo_width() - 2
-            w = int(self._smooth_level * max_w)
-            self.meter_canvas.coords(self.meter_bar, 1, 1, 1 + w, 17)
+            self.on_save_callback(self._cfg)
         except Exception:
             pass
-        self.after(40, self._update_test_meter)
+        if toast:
+            self._toast(toast, toast_kind)
 
-    def _refresh_transcriptions_list(self) -> None:
-        if not hasattr(self, "logs_text") or self.logs_text is None:
-            return
-        self.logs_text.configure(state="normal")
-        self.logs_text.delete("1.0", "end")
-        self._listed_files = []
-
-        files = glob.glob(os.path.join(diary_dir(), "*.md"))
-        files.sort(reverse=True)
-
-        if not files:
-            self.logs_text.insert("end", "Nenhuma transcrição salva ainda.\n")
-        else:
-            for f in files:
-                basename = os.path.basename(f)
-                try:
-                    with open(f, "r", encoding="utf-8") as f_obj:
-                        lines = f_obj.readlines()
-                        entries = sum(1 for line in lines if line.startswith("## "))
-                except Exception:
-                    entries = 0
-
-                self._listed_files.append(f)
-                self.logs_text.insert("end", f"📄 {basename:<25} {entries} entrada(s)\n", "link")
-
-        self.logs_text.configure(state="disabled")
-
-    def _on_transcription_clicked(self, event: object) -> None:
-        index_str = self.logs_text.index(f"@{event.x},{event.y}")
-        line_num = int(index_str.split(".")[0]) - 1
-        if 0 <= line_num < len(self._listed_files):
-            file_path = self._listed_files[line_num]
-            if os.path.exists(file_path):
-                try:
-                    os.startfile(file_path)
-                except Exception as error:
-                    messagebox.showerror("Erro ao abrir", f"Não foi possível abrir o arquivo: {error}", parent=self)
-
-    def _delete_all_transcriptions(self) -> None:
-        if messagebox.askyesno("Confirmar Exclusão", "Tem certeza que deseja apagar permanentemente todas as transcrições salvas?", parent=self):
-            files = glob.glob(os.path.join(diary_dir(), "*.md"))
-            for f in files:
-                try:
-                    os.remove(f)
-                except Exception:
-                    pass
-            self._refresh_transcriptions_list()
-            self.error_label.configure(text="Transcrições apagadas com sucesso.", fg=SUCCESS_COLOR)
-
-    def _open_quantum_brain_folder(self) -> None:
-        try:
-            from .quantum_brain import quantum_brain_dir
-            path = quantum_brain_dir(self.current_config)
-            os.startfile(str(path))
-        except Exception as e:
-            messagebox.showerror("Erro ao abrir pasta", f"Não foi possível abrir a pasta: {e}", parent=self)
-
-    def _trigger_manual_synthesis(self) -> None:
-        try:
-            from .quantum_brain import QuantumBrainOrchestrator
-            orchestrator = QuantumBrainOrchestrator.get_instance(self.current_config)
-
-            def run_sync():
-                self.stats_label.configure(text="Sintetizando notas (processamento em background)...")
-                try:
-                    orchestrator._trigger_synthesis()
-                    self.after(2000, self._update_quantum_brain_stats)
-                except Exception as error:
-                    message = str(error)
-                    self.after(
-                        0,
-                        lambda detail=message: messagebox.showerror(
-                            "Erro na síntese",
-                            f"Falha ao iniciar síntese: {detail}",
-                            parent=self,
-                        ),
-                    )
-
-            threading.Thread(target=run_sync, daemon=True).start()
-        except Exception as e:
-            messagebox.showerror("Erro", str(e), parent=self)
-
-    def _update_quantum_brain_stats(self) -> None:
-        if not hasattr(self, "stats_label") or self.stats_label is None:
-            return
-        try:
-            from .quantum_brain import QuantumBrainOrchestrator
-            orchestrator = QuantumBrainOrchestrator.get_instance(self.current_config)
-            stats = orchestrator.get_stats()
-
-            last_synthesis_str = "Nunca"
-            if stats["last_synthesis"]:
-                import datetime
-                dt = datetime.datetime.fromtimestamp(stats["last_synthesis"])
-                last_synthesis_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-
-            text = (
-                f"• Notas brutas pendentes de síntese: {stats['unsynthesized']}\n"
-                f"• Projetos ativos mapeados: {stats['projects']}\n"
-                f"• Última síntese realizada: {last_synthesis_str}"
-            )
-            self.stats_label.configure(text=text)
-        except Exception as e:
-            self.stats_label.configure(text=f"Erro ao ler estatísticas: {e}")
-
-    def _refresh_backups_list(self) -> None:
-        if not hasattr(self, "backup_tree") or self.backup_tree is None:
-            return
-        self.backup_tree.delete(*self.backup_tree.get_children())
-        self._backup_items_map.clear()
-
-        try:
-            backups = list_backups()
-            if not backups:
-                self.backup_tree.insert("", "end", values=("Nenhum backup encontrado.", "-", "-", "-", "-"))
-            else:
-                for b in backups:
-                    item_id = self.backup_tree.insert("", "end", values=(
-                        b["filename"],
-                        "Apenas Código" if b["code_only"] else "Completo",
-                        b["version"],
-                        b["datetime"],
-                        f"{b['size_kb']:.1f} KB"
-                    ))
-                    self._backup_items_map[item_id] = b
-        except Exception as e:
-            messagebox.showerror("Erro ao Listar", f"Não foi possível listar os backups: {e}", parent=self)
-
-    def _on_create_backup_clicked(self) -> None:
-        self.btn_create_backup.configure(state="disabled", text="Criando...")
-        self.update()
-
-        try:
-            code_only = self.code_only_var.get()
-            zip_path, elapsed, size = create_backup(code_only=code_only)
-            size_mb = size / (1024 * 1024)
-            type_str = "Apenas Código" if code_only else "Completo"
-            messagebox.showinfo(
-                "Backup Concluído",
-                f"Backup ({type_str}) criado com sucesso!\n\n"
-                f"Arquivo: {zip_path.name}\n"
-                f"Tamanho: {size_mb:.2f} MB ({size / 1024:.1f} KB)\n"
-                f"Tempo decorrido: {elapsed:.2f}s",
-                parent=self
-            )
-        except Exception as e:
-            messagebox.showerror("Erro no Backup", f"Erro ao gerar backup: {e}", parent=self)
-        finally:
-            self.btn_create_backup.configure(state="normal", text="Criar Backup 💾")
-            self._refresh_backups_list()
-
-    def _on_restore_file_clicked(self) -> None:
-        from tkinter import filedialog
-
-        file_path_str = filedialog.askopenfilename(
-            initialdir=str(Path(get_project_root()) / "backups"),
-            title="Selecionar Backup para Restaurar",
-            filetypes=[("Arquivos Zip", "*.zip")],
-            parent=self
-        )
-        if not file_path_str:
-            return
-
-        zip_path = Path(file_path_str)
-        if not zip_path.exists():
-            return
-
-        is_code = zip_path.name.endswith("_code.zip")
-        type_desc = "apenas os arquivos de código" if is_code else "o código E as configurações pessoais"
-
-        confirm = messagebox.askyesno(
-            "Confirmar Restauração",
-            f"Tem certeza que deseja restaurar {type_desc} do backup '{zip_path.name}'?\n\n"
-            "Isso substituirá os arquivos antigos do aplicativo.\n"
-            "O aplicativo deve ser reiniciado após a restauração.",
-            parent=self
-        )
-        if not confirm:
-            return
-
-        try:
-            restore_backup(zip_path)
-            messagebox.showinfo(
-                "Restauração Concluída",
-                "Backup restaurado com sucesso!\n\n"
-                "Por favor, feche e abra o Quantum Scribe novamente para carregar as novas configurações e código.",
-                parent=self
-            )
-        except Exception as e:
-            messagebox.showerror("Erro na Restauração", f"Falha ao restaurar o backup: {e}", parent=self)
-
-    def _on_restore_selected_clicked(self) -> None:
-        selected_item = self.backup_tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Aviso", "Selecione um backup na lista para restaurar.", parent=self)
-            return
-
-        item_id = selected_item[0]
-        backup_data = self._backup_items_map.get(item_id)
-        if not backup_data:
-            return
-
-        zip_path = backup_data["path"]
-        is_code = zip_path.name.endswith("_code.zip")
-        type_desc = "apenas os arquivos de código" if is_code else "o código E as configurações pessoais"
-
-        confirm = messagebox.askyesno(
-            "Confirmar Restauração",
-            f"Tem certeza que deseja restaurar {type_desc} do backup '{zip_path.name}'?\n\n"
-            "Isso substituirá os arquivos antigos do aplicativo.\n"
-            "O aplicativo deve ser reiniciado após a restauração.",
-            parent=self
-        )
-        if not confirm:
-            return
-
-        try:
-            restore_backup(zip_path)
-            messagebox.showinfo(
-                "Restauração Concluída",
-                "Backup restaurado com sucesso!\n\n"
-                "Por favor, feche e abra o Quantum Scribe novamente para carregar as novas configurações e código.",
-                parent=self
-            )
-        except Exception as e:
-            messagebox.showerror("Erro na Restauração", f"Falha ao restaurar o backup: {e}", parent=self)
-
-    def _on_delete_selected_clicked(self) -> None:
-        selected_item = self.backup_tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Aviso", "Selecione um backup na lista para excluir.", parent=self)
-            return
-
-        item_id = selected_item[0]
-        backup_data = self._backup_items_map.get(item_id)
-        if not backup_data:
-            return
-
-        zip_path = backup_data["path"]
-        confirm = messagebox.askyesno(
-            "Confirmar Exclusão",
-            f"Tem certeza que deseja excluir permanentemente o arquivo de backup '{zip_path.name}'?",
-            parent=self
-        )
-        if not confirm:
-            return
-
-        try:
-            delete_backup(zip_path)
-            self._refresh_backups_list()
-        except Exception as e:
-            messagebox.showerror("Erro ao Excluir", f"Falha ao excluir o backup: {e}", parent=self)
-
-    # ------------------ FOOTER & SALVAR ------------------
-    def _build_footer(self) -> None:
-        footer_frame = tk.Frame(self.content_frame, bg=BG_COLOR)
-        footer_frame.pack(side="bottom", fill="x", pady=(20, 0))
-
-        tk.Frame(footer_frame, bg=BORDER_COLOR, height=1).pack(fill="x", pady=(0, 15))
-
-        self.error_label = tk.Label(footer_frame, text="", font=("Segoe UI Semibold", 9), fg=DANGER_COLOR, bg=BG_COLOR, anchor="w")
-        self.error_label.pack(side="left", padx=25)  # Espaçamento para alinhar com o padding interno do canvas
-
-        self.save_btn = tk.Button(
-            footer_frame, text="Salvar Alterações", bg=ACCENT_COLOR, fg="#ffffff",
-            activebackground=ACCENT_HOVER, activeforeground="#ffffff", font=("Segoe UI Bold", 9),
-            relief="flat", bd=0, padx=20, pady=6, cursor="hand2", command=self._on_save_clicked
-        )
-        self.save_btn.pack(side="right", padx=(0, 25))
-        self.save_btn.bind("<Enter>", lambda _: self.save_btn.configure(bg=ACCENT_HOVER))
-        self.save_btn.bind("<Leave>", lambda _: self.save_btn.configure(bg=ACCENT_COLOR))
-
-        cancel_btn = tk.Button(
-            footer_frame, text="Cancelar", bg=CANCEL_BG, fg=TEXT_COLOR,
-            activebackground=CANCEL_HOVER, activeforeground=TEXT_COLOR, font=("Segoe UI Semibold", 9),
-            relief="flat", bd=0, padx=15, pady=6, cursor="hand2", command=self.destroy
-        )
-        cancel_btn.pack(side="right")
-        cancel_btn.bind("<Enter>", lambda e, b=cancel_btn: b.configure(bg=CANCEL_HOVER))
-        cancel_btn.bind("<Leave>", lambda e, b=cancel_btn: b.configure(bg=CANCEL_BG))
-
-    def _set_widgets_state(self, state: str) -> None:
-        for sid, btn_data in self._sidebar_btns.items():
-            btn_data["frame"].configure(cursor="" if state == "disabled" else "hand2")
-
-    def _on_save_clicked(self) -> None:
-        hotkey_normal = self.hotkey_normal_entry.get().strip() if self.hotkey_normal_entry is not None else self.current_config.hotkey
-        hotkey_translate = self.hotkey_translate_entry.get().strip() if self.hotkey_translate_entry is not None else getattr(self.current_config, "hotkey_translate", "Ctrl+Alt+Space")
-        hotkey_auto_send = self.hotkey_auto_send_entry.get().strip() if self.hotkey_auto_send_entry is not None else getattr(self.current_config, "hotkey_auto_send", "Ctrl+Shift+Space")
-        hotkey_quantum_brain = self.hotkey_quantum_brain_entry.get().strip() if self.hotkey_quantum_brain_entry is not None else getattr(self.current_config, "hotkey_quantum_brain", "Ctrl+Shift+D")
-
-        # Valida atalhos
-        for name, val in [("Normal", hotkey_normal), ("Tradução", hotkey_translate), ("Auto Enviar", hotkey_auto_send), ("Quantum Brain", hotkey_quantum_brain)]:
+    def _toast(self, message: str, kind: str = "success") -> None:
+        if self._toast_after_id:
             try:
-                _parse_hotkey(val)
-            except ValueError as exc:
-                self.error_label.configure(text=f"Erro no atalho ({name}): {exc}", fg=DANGER_COLOR)
-                self._show_section("preferences")
-                return
+                self.after_cancel(self._toast_after_id)
+            except Exception:
+                pass
+        toast = Toast(self, self.theme, message, kind)
+        toast.place(relx=0.5, rely=1.0, x=0, y=-28, anchor="s")
+        toast.lift()
+        self._toast_after_id = self.after(2400, toast.destroy)
 
-        lang_friendly = self.lang_friendly_var.get()
-        lang = self._lang_friendly_map.get(lang_friendly, "auto")
-        if lang == "auto":
-            lang = ""
-
-        mic_selected = self.mic_var.get()
-        if mic_selected == "Padrão do Sistema":
-            mic_selected = ""
-
-        selected_model_id = self.friendly_to_id.get(self.model_name_var.get(), "medium")
-
-        custom_dict = self.current_config.custom_dict
-
-        updated_config = AppConfig(
-            model=selected_model_id,
-            language=lang,
-            device=self.device_var.get(),
-            compute_type=self.compute_var.get(),
-            preload_model=getattr(self.current_config, "preload_model", False),
-            auto_download_model=getattr(self.current_config, "auto_download_model", True),
-            audio_device=mic_selected,
-            auto_paste=self.paste_var.get(),
-            hotkey=hotkey_normal,
-            hotkey_translate=hotkey_translate,
-            hotkey_auto_send=hotkey_auto_send,
-            hotkey_quantum_brain=hotkey_quantum_brain,
-            quantum_brain_enabled=self.quantum_brain_enabled_var.get(),
-            quantum_brain_sync_interval_min=self.quantum_brain_sync_interval_var.get(),
-            quantum_brain_sync_threshold=self.quantum_brain_sync_threshold_var.get(),
-            quantum_brain_also_paste=self.quantum_brain_also_paste_var.get(),
-            quantum_brain_llm_repo=getattr(self.current_config, "quantum_brain_llm_repo", "jncraton/Qwen2.5-3B-Instruct-ct2-int8"),
-            quantum_brain_api_key=getattr(self.current_config, "quantum_brain_api_key", ""),
-            initial_prompt=self.prompt_text.get("1.0", "end-1c").strip() if self.prompt_text is not None else (getattr(self.current_config, "initial_prompt", "") or ""),
-            play_sounds=self.sounds_var.get(),
-            sound_volume=float(self.sound_volume_var.get()),
-            hud_theme=self._theme_id_map.get(self.hud_theme_var.get(), "dots"),
-            atom_color=self._atom_color_val,
-            custom_dict=custom_dict,
-            tone_style=self.tone_var.get(),
-            literal_mode=self.literal_mode_var.get(),
-            punctuation_assist=self.punctuation_assist_var.get(),
-            punctuation_pause_ms=getattr(self.current_config, "punctuation_pause_ms", 650),
-            continuous_learning=self.learning_var.get(),
-            use_llm_rewriter=self.rewriter_var.get(),
-            ai_mode=self.ai_mode_var.get(),
-            llm_model_repo=getattr(self.current_config, "llm_model_repo", "jncraton/Qwen2.5-0.5B-Instruct-ct2-int8"),
-            custom_tones=getattr(self.current_config, "custom_tones", {}),
-            llm_custom_tones=getattr(self.current_config, "llm_custom_tones", {}),
-            # ---- Motor de Voz ----
-            streaming_mode=self.streaming_var.get(),
-            stream_min_silence_ms=self.min_silence_var.get(),
-            audio_enhance=self.audio_enhance_var.get(),
-            audio_enhance_profile=self._profile_id_map.get(self.audio_enhance_profile_var.get(), "balanced"),
-            remove_stutters=self.remove_stutters_var.get(),
-            remove_fillers=self.remove_fillers_var.get(),
-            custom_fillers=self.custom_fillers_entry.get().strip() if self.custom_fillers_entry is not None else getattr(self.current_config, "custom_fillers", ""),
-            save_audio_for_training=getattr(self.current_config, "save_audio_for_training", False),
+    def _refresh_theme(self, toast: str | None = None) -> None:
+        """Reconstrói a janela inteira com o novo tema (modo/cor alterados)."""
+        self.theme = build_theme(
+            getattr(self._cfg, "theme_mode", "dark"),
+            getattr(self._cfg, "accent_color", DEFAULT_ACCENT),
         )
+        current = self._current_page
+        self._current_page = current
+        self._build_window()
+        if toast:
+            self._toast(toast)
 
-        self.on_save_callback(updated_config)
-        self.destroy()
+    # ------------------------------------------------------------------
+    # Encerramento seguro
+    # ------------------------------------------------------------------
 
     def destroy(self) -> None:
         self._stop_test_stream()
         super().destroy()
+
+
+class ScrollArea(tk.Frame):
+    """Área rolável suave baseada em Canvas, com rolagem por roda do mouse."""
+
+    def __init__(self, parent: tk.Widget, theme_bg: str | None = None, **kwargs) -> None:
+        bg = theme_bg or "#0A0B0D"
+        super().__init__(parent, bg=bg, **kwargs)
+        self.canvas = tk.Canvas(self, bg=bg, bd=0, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical",
+                                       command=self.canvas.yview, style="Vertical.TScrollbar")
+        self.inner = tk.Frame(self.canvas, bg=bg)
+        self.inner.bind("<Configure>",
+                        lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self._window_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.canvas.bind("<Configure>", self._fit_width)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.bind("<Enter>", self._bind_wheel)
+        self.canvas.bind("<Leave>", self._unbind_wheel)
+
+    def _fit_width(self, event) -> None:
+        self.canvas.itemconfig(self._window_id, width=event.width)
+
+    def _bind_wheel(self, _event) -> None:
+        self.canvas.bind_all("<MouseWheel>", self._on_wheel)
+
+    def _unbind_wheel(self, _event) -> None:
+        self.canvas.unbind_all("<MouseWheel>")
+
+    def _on_wheel(self, event) -> None:
+        try:
+            if event.widget.winfo_class() in ("Text", "Treeview"):
+                return
+        except Exception:
+            pass
+        try:
+            self.canvas.yview_scroll(int(-event.delta / 120), "units")
+        except Exception:
+            pass
+
+# ---------------------------------------------------------------------------
+# Páginas: registro e construtores
+# ---------------------------------------------------------------------------
+
+def _register_pages(self: SettingsWindow) -> None:
+    self._register_page("appearance", self._page_appearance)
+    self._register_page("dictation", self._page_dictation)
+    self._register_page("ai", self._page_ai)
+    self._register_page("audio", self._page_audio)
+    self._register_page("shortcuts", self._page_shortcuts)
+    self._register_page("brain", self._page_brain)
+    self._register_page("storage", self._page_storage)
+    self._register_page("about", self._page_about)
+    # Subpáginas de Ditado
+    self._register_page("sub_model", self._page_sub_model, parent="dictation")
+    self._register_page("sub_language", self._page_sub_language, parent="dictation")
+    self._register_page("sub_hardware", self._page_sub_hardware, parent="dictation")
+    self._register_page("sub_prompt", self._page_sub_prompt, parent="dictation")
+    self._register_page("sub_fillers", self._page_sub_fillers, parent="dictation")
+    # Subpáginas de Aparência
+    self._register_page("sub_hud_theme", self._page_sub_hud_theme, parent="appearance")
+    self._register_page("sub_atom_color", self._page_sub_atom_color, parent="appearance")
+    # Subpáginas de IA
+    self._register_page("sub_tone", self._page_sub_tone, parent="ai")
+    self._register_page("sub_tone_editor", self._page_sub_tone_editor, parent="sub_tone")
+    # Subpáginas de Áudio
+    self._register_page("sub_mic", self._page_sub_mic, parent="audio")
+    self._register_page("sub_profile", self._page_sub_profile, parent="audio")
+    self._register_page("sub_silence", self._page_sub_silence, parent="audio")
+
+
+def _rebuild_page(self: SettingsWindow, page_id: str) -> None:
+    """Destrói e reconstrói uma página (para refletir novos estados)."""
+    page = self._pages.pop(page_id, None)
+    if page is not None:
+        page.destroy()
+    if self._current_page == page_id:
+        self._show(page_id)
+
+
+SettingsWindow._register_pages = _register_pages
+SettingsWindow._rebuild_page = _rebuild_page
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: APARÊNCIA
+# ---------------------------------------------------------------------------
+
+def _page_appearance(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["appearance"])
+
+    # --- Tema (modo Escuro / Claro) ---
+    card = self._card(body, "Tema")
+    row = self._row_base(card, "Modo de Exibição",
+                         "Escolha entre a aparência escura ou clara em todo o app.")
+    mode = getattr(self._cfg, "theme_mode", "dark")
+
+    def on_mode_change(key: str) -> None:
+        self._set("theme_mode", key)
+        self._refresh_theme(toast="Tema claro ativado" if key == "light" else "Tema escuro ativado")
+
+    seg = SegmentedControl(row, t, [("dark", "Escuro"), ("light", "Claro")],
+                           mode, on_mode_change, self.font_name)
+    seg.grid(row=0, column=1, sticky="e")
+
+    # --- Cor de destaque ---
+    card = self._card(body, "Cor de Destaque")
+    row = self._row_base(card, "Cor do Aplicativo",
+                         "A cor de destaque tinge botões, toggles e barras de progresso.")
+    swatches = tk.Frame(row, bg=t.card_bg)
+    swatches.grid(row=0, column=1, sticky="e")
+
+    current_accent = getattr(self._cfg, "accent_color", DEFAULT_ACCENT).upper()
+    self._swatch_widgets: list[ColorSwatch] = []
+
+    def pick(hex_color: str) -> None:
+        self._set("accent_color", hex_color)
+        self._refresh_theme(toast="Cor de destaque atualizada")
+
+    for name, hex_color in ACCENT_PRESETS:
+        sw = ColorSwatch(swatches, t, hex_color,
+                         selected=(hex_color.upper() == current_accent),
+                         command=lambda c=hex_color: pick(c))
+        sw.pack(side="left", padx=3)
+        self._swatch_widgets.append(sw)
+
+    # Amostra personalizada (seletor de cores do sistema)
+    custom = tk.Canvas(swatches, width=38, height=38, bd=0, highlightthickness=0,
+                       bg=t.card_bg, cursor="hand2")
+    custom.pack(side="left", padx=3)
+    known = {c.upper() for _, c in ACCENT_PRESETS}
+    is_custom = current_accent not in known
+
+    def draw_custom(selected: bool = False) -> None:
+        custom.delete("all")
+        if selected:
+            custom.create_oval(1, 1, 37, 37, outline=t.accent, width=2)
+        segments = ["#BF5AF2", "#FF2D78", "#0A84FF", "#30D158", "#FFD60A", "#FF6000"]
+        for i, seg_color in enumerate(segments):
+            custom.create_arc(4, 4, 34, 34, start=i * 60, extent=60,
+                              fill=seg_color, outline="")
+        if selected:
+            custom.create_text(19, 19, text="✓", fill="#FFFFFF", font=("Segoe UI Bold", 10))
+
+    draw_custom(is_custom)
+
+    def pick_custom(_event=None) -> None:
+        from tkinter import colorchooser
+        result = colorchooser.askcolor(color=current_accent,
+                                       title="Escolha a cor de destaque", parent=self)
+        if result and result[1]:
+            pick(result[1].upper())
+
+    custom.bind("<Button-1>", pick_custom)
+
+    # --- Indicador flutuante (HUD) ---
+    card = self._card(body, "Indicador Flutuante (HUD)")
+
+    self._row_nav(card, "Animação do HUD",
+                  "Estilo visual exibido enquanto você dita.",
+                  lambda: dict((k, n) for k, n, _d in HUD_THEMES).get(self._cfg.hud_theme, "Bolinhas"),
+                  "sub_hud_theme")
+
+    self._row_nav(card, "Cor do Átomo",
+                  "Cor das órbitas e elétrons nos temas de átomo.",
+                  lambda: self._cfg.atom_color.upper(), "sub_atom_color")
+
+    note = tk.Label(
+        body,
+        text="As alterações de aparência são aplicadas imediatamente, sem reiniciar.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w",
+    )
+    note.pack(fill="x", padx=4, pady=(10, 0))
+    return page
+
+
+SettingsWindow._page_appearance = _page_appearance
+
+
+def _page_sub_hud_theme(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell("Animação do HUD",
+                                  "Escolha como o indicador flutuante aparece durante o ditado.",
+                                  back_to="appearance")
+    card = self._card(body)
+    for theme_id, name, desc in HUD_THEMES:
+        self._radio_row(card, name, desc,
+                        selected=(self._cfg.hud_theme == theme_id),
+                        command=lambda tid=theme_id: self._select_hud_theme(tid))
+    return page
+
+
+SettingsWindow._page_sub_hud_theme = _page_sub_hud_theme
+
+
+def _select_hud_theme(self: SettingsWindow, theme_id: str) -> None:
+    self._set("hud_theme", theme_id, toast="Animação do HUD atualizada")
+    self._rebuild_page("sub_hud_theme")
+
+
+SettingsWindow._select_hud_theme = _select_hud_theme
+
+
+def _page_sub_atom_color(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell("Cor do Átomo",
+                                  "Escolha a cor das órbitas e elétrons do indicador.",
+                                  back_to="appearance")
+    card = self._card(body)
+    row = self._row_base(card, "Cores Sugeridas", "Toque em uma cor para aplicar.")
+    swatches = tk.Frame(row, bg=t.card_bg)
+    swatches.grid(row=0, column=1, sticky="e")
+
+    atom_presets = ["#BF5AF2", "#FF2D78", "#0A84FF", "#30D158", "#FFD60A", "#FF6000"]
+    current = self._cfg.atom_color.upper()
+
+    def pick(hex_color: str) -> None:
+        self._set("atom_color", hex_color, toast="Cor do átomo atualizada")
+        self._rebuild_page("sub_atom_color")
+
+    for hex_color in atom_presets:
+        sw = ColorSwatch(swatches, t, hex_color,
+                         selected=(hex_color.upper() == current),
+                         command=lambda c=hex_color: pick(c))
+        sw.pack(side="left", padx=3)
+
+    row2 = self._row_base(card, "Cor Personalizada", "Abra o seletor de cores do sistema.")
+    self._button(row2, "Escolher Cor…", lambda: _pick_custom_atom(self), "secondary").grid(
+        row=0, column=1, sticky="e")
+    return page
+
+
+def _pick_custom_atom(self: SettingsWindow) -> None:
+    from tkinter import colorchooser
+    result = colorchooser.askcolor(color=self._cfg.atom_color,
+                                   title="Escolha a cor do átomo", parent=self)
+    if result and result[1]:
+        self._set("atom_color", result[1].upper(), toast="Cor do átomo atualizada")
+        self._rebuild_page("sub_atom_color")
+
+
+SettingsWindow._page_sub_atom_color = _page_sub_atom_color
+
+
+# ---------------------------------------------------------------------------
+# Linha de seleção única (radio) reutilizável nas subpáginas
+# ---------------------------------------------------------------------------
+
+def _radio_row(self: SettingsWindow, card: tk.Frame, label: str, desc: str | None,
+               selected: bool, command: Callable[[], None],
+               trailing: tk.Widget | None = None) -> tk.Frame:
+    """Linha clicável com marcador de seleção estilo iOS (círculo + check)."""
+    t = self.theme
+    row = self._row_base(card, label, desc)
+
+    mark = tk.Canvas(row, width=24, height=24, bd=0, highlightthickness=0, bg=t.card_bg)
+    mark.grid(row=0, column=1, sticky="e", padx=(8, 0))
+
+    def draw() -> None:
+        mark.delete("all")
+        if selected:
+            mark.create_oval(2, 2, 22, 22, fill=t.accent, outline="")
+            mark.create_text(12, 12, text="✓", fill=t.on_accent, font=("Segoe UI Bold", 10))
+        else:
+            mark.create_oval(2, 2, 22, 22, outline=t.border, width=2)
+
+    draw()
+
+    if trailing is not None:
+        trailing.grid(row=0, column=2, sticky="e", padx=(8, 0))
+
+    clickable = [row, mark]
+    for child in row.winfo_children():
+        if isinstance(child, tk.Frame):
+            clickable.append(child)
+            clickable.extend(child.winfo_children())
+    for w in clickable:
+        try:
+            w.bind("<Button-1>", lambda _e: command())
+            w.configure(cursor="hand2")
+        except Exception:
+            pass
+    return row
+
+
+SettingsWindow._radio_row = _radio_row
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: DITADO
+# ---------------------------------------------------------------------------
+
+def _page_dictation(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell(*self.SECTION_TITLES["dictation"])
+
+    # --- Modelo de IA ---
+    card = self._card(body, "Reconhecimento de Voz")
+
+    self._row_nav(card, "Modelo de IA",
+                  "Tamanho e precisão do modelo Whisper.",
+                  lambda: MODELS_MAP.get(self._cfg.model, MODELS_MAP["medium"])["name"],
+                  "sub_model")
+
+    self._row_nav(card, "Idioma",
+                  "Idioma falado durante o ditado.",
+                  lambda: dict(LANGUAGES).get(self._cfg.language or "auto", "Detecção Automática"),
+                  "sub_language")
+
+    self._row_nav(card, "Hardware e Precisão",
+                  "Processador e quantização usados na transcrição.",
+                  lambda: dict((k, n) for k, n, _d in DEVICES).get(self._cfg.device, "Automático"),
+                  "sub_hardware")
+
+    self._row_nav(card, "Prompt Auxiliar",
+                  "Vocabulário e regras ensinados ao modelo.",
+                  "Editar", "sub_prompt")
+
+    # --- Estilo do texto ---
+    card = self._card(body, "Estilo do Texto")
+
+    self._row_toggle(card, "Transcrição Literal",
+                     "Preserva exatamente o que foi falado, sem correções automáticas.",
+                     self.literal_mode_var, "literal_mode",
+                     toast=None)
+
+    self._row_toggle(card, "Pontuação Inteligente",
+                     "Insere pontos e interrogações pelas pausas naturais da fala.",
+                     self.punctuation_assist_var, "punctuation_assist")
+
+    self._row_toggle(card, "Remover Repetições",
+                     "Limpa gagueiras e palavras duplicadas em sequência.",
+                     self.remove_stutters_var, "remove_stutters")
+
+    self._row_toggle(card, "Remover Hesitações",
+                     "Remove sons como “hmm”, “ãh” e “eh” do texto final.",
+                     self.remove_fillers_var, "remove_fillers")
+
+    self._row_nav(card, "Hesitações Personalizadas",
+                  "Palavras extras a remover, separadas por vírgula.",
+                  "Editar", "sub_fillers")
+
+    # --- Saída ---
+    card = self._card(body, "Saída do Texto")
+
+    self._row_toggle(card, "Colar Automaticamente",
+                     "Digita o texto no cursor assim que a transcrição termina. "
+                     "Desligado, o texto vai apenas para a área de transferência.",
+                     self.paste_var, "auto_paste")
+
+    return page
+
+
+SettingsWindow._page_dictation = _page_dictation
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: MODELO DE IA (com download em percentual real)
+# ---------------------------------------------------------------------------
+
+def _page_sub_model(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(
+        "Modelo de IA",
+        "Toque em um modelo para usá-lo. Modelos não instalados podem ser baixados aqui.",
+        back_to="dictation")
+
+    card = self._card(body)
+    self._dl_rows: dict[str, dict[str, tk.Widget]] = {}
+
+    for model_id, info in MODELS_MAP.items():
+        downloaded = is_model_downloaded(model_id)
+        selected = self._cfg.model == model_id
+
+        status = "✓ Instalado" if downloaded else f"{info['size']} — não instalado"
+        desc = f"{info['desc']}  ·  {status}"
+
+        row = self._radio_row(
+            card, info["name"], desc,
+            selected=selected,
+            command=lambda mid=model_id: self._select_model(mid),
+        )
+
+        widgets: dict[str, tk.Widget] = {"row": row}
+        if not downloaded and not self._dl_active:
+            btn = self._button(row, "Baixar", lambda mid=model_id: self._start_model_download(mid),
+                               "primary")
+            btn.grid(row=0, column=2, sticky="e", padx=(10, 0))
+            widgets["button"] = btn
+        self._dl_rows[model_id] = widgets
+
+    # Área de progresso do download (aparece somente durante o download)
+    self._dl_frame = tk.Frame(body, bg=t.card_bg,
+                              highlightthickness=1, highlightbackground=t.border)
+    self._dl_title = tk.Label(self._dl_frame, text="", font=(self.font_name, 10, "bold"),
+                              fg=t.text, bg=t.card_bg, anchor="w")
+    self._dl_title.pack(fill="x", padx=16, pady=(12, 2))
+    self._dl_detail = tk.Label(self._dl_frame, text="", font=(self.font_name, 8),
+                               fg=t.muted, bg=t.card_bg, anchor="w")
+    self._dl_detail.pack(fill="x", padx=16)
+    bar_row = tk.Frame(self._dl_frame, bg=t.card_bg)
+    bar_row.pack(fill="x", padx=16, pady=(8, 12))
+    self._dl_pct_var = tk.DoubleVar(value=0.0)
+    self._dl_bar = ttk.Progressbar(bar_row, orient="horizontal", mode="determinate",
+                                   variable=self._dl_pct_var, maximum=100.0,
+                                   style="Accent.Horizontal.TProgressbar")
+    self._dl_bar.pack(side="left", fill="x", expand=True)
+    self._dl_pct_label = tk.Label(bar_row, text="0%", font=(self.font_name, 10, "bold"),
+                                  fg=t.accent, bg=t.card_bg, width=5, anchor="e")
+    self._dl_pct_label.pack(side="left", padx=(10, 0))
+
+    if self._dl_active:
+        self._dl_frame.pack(fill="x", pady=(10, 6))
+
+    note = tk.Label(
+        body,
+        text="O download é retomado automaticamente se for interrompido.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w",
+    )
+    note.pack(fill="x", padx=4, pady=(8, 0))
+    return page
+
+
+SettingsWindow._page_sub_model = _page_sub_model
+
+
+def _select_model(self: SettingsWindow, model_id: str) -> None:
+    if model_id == self._cfg.model:
+        return
+    name = MODELS_MAP.get(model_id, {}).get("name", model_id)
+    if is_model_downloaded(model_id):
+        self._set("model", model_id, toast=f"Modelo {name} ativado")
+    else:
+        self._set("model", model_id,
+                  toast=f"Modelo {name} selecionado — o download começará em segundo plano",
+                  toast_kind="info")
+    self._rebuild_page("sub_model")
+
+
+SettingsWindow._select_model = _select_model
+
+
+def _start_model_download(self: SettingsWindow, model_id: str) -> None:
+    if self._dl_active:
+        return
+    self._dl_active = True
+
+    info = MODELS_MAP.get(model_id, {})
+    name = info.get("name", model_id)
+
+    def on_progress(percent: float, downloaded: int, total: int) -> None:
+        def update() -> None:
+            if not self.winfo_exists():
+                return
+            try:
+                self._dl_pct_var.set(percent)
+                self._dl_pct_label.configure(text=f"{percent:.0f}%")
+                if total > 0:
+                    self._dl_detail.configure(
+                        text=f"{format_bytes(downloaded)} de {format_bytes(total)}")
+            except Exception:
+                pass
+        try:
+            self.after(0, update)
+        except Exception:
+            pass
+
+    def worker() -> None:
+        from .model_manager import ModelDownloadError, ensure_model_downloaded
+        error: Exception | None = None
+        try:
+            ensure_model_downloaded(
+                model_id,
+                downloader=lambda m, cache_dir: download_whisper_with_progress(
+                    m, cache_dir, on_progress),
+            )
+        except (ModelDownloadError, Exception) as exc:  # noqa: BLE001
+            error = exc
+
+        def finish() -> None:
+            self._dl_active = False
+            if error is None:
+                self._toast(f"Modelo {name} instalado com sucesso")
+            else:
+                self._toast(f"Falha no download: {error}", kind="error")
+            if self.winfo_exists():
+                self._rebuild_page("sub_model")
+
+        try:
+            self.after(0, finish)
+        except Exception:
+            pass
+
+    # Reconstrói a página para exibir a área de progresso no lugar dos botões
+    self._rebuild_page("sub_model")
+    self._dl_title.configure(text=f"Baixando {name}…")
+    self._dl_detail.configure(text="Conectando ao Hugging Face…")
+    threading.Thread(target=worker, daemon=True).start()
+
+
+SettingsWindow._start_model_download = _start_model_download
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: IDIOMA
+# ---------------------------------------------------------------------------
+
+def _page_sub_language(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell("Idioma",
+                                  "Idioma principal da sua fala durante o ditado.",
+                                  back_to="dictation")
+    card = self._card(body)
+    current = self._cfg.language or "auto"
+    for code, name in LANGUAGES:
+        self._radio_row(card, name, None,
+                        selected=(current == code),
+                        command=lambda c=code: self._select_language(c))
+    return page
+
+
+SettingsWindow._page_sub_language = _page_sub_language
+
+
+def _select_language(self: SettingsWindow, code: str) -> None:
+    value = "" if code == "auto" else code
+    name = dict(LANGUAGES).get(code, code)
+    self._set("language", value, toast=f"Idioma definido: {name}")
+    self._rebuild_page("sub_language")
+
+
+SettingsWindow._select_language = _select_language
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: HARDWARE E PRECISÃO (opções dentro de opções)
+# ---------------------------------------------------------------------------
+
+def _page_sub_hardware(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell("Hardware e Precisão",
+                                  "Onde a transcrição é processada e com qual quantização.",
+                                  back_to="dictation")
+
+    card = self._card(body, "Processador")
+    for dev_id, name, desc in DEVICES:
+        self._radio_row(card, name, desc,
+                        selected=(self._cfg.device == dev_id),
+                        command=lambda d=dev_id: self._select_device(d))
+
+    card = self._card(body, "Precisão (Quantização)")
+    for ct_id, name, desc in COMPUTE_TYPES:
+        self._radio_row(card, name, desc,
+                        selected=(self._cfg.compute_type == ct_id),
+                        command=lambda c=ct_id: self._select_compute(c))
+
+    t = self.theme
+    note = tk.Label(
+        body,
+        text="Ao trocar o processador ou a precisão, o modelo é recarregado automaticamente no próximo ditado.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w", wraplength=620,
+        justify="left",
+    )
+    note.pack(fill="x", padx=4, pady=(8, 0))
+    return page
+
+
+SettingsWindow._page_sub_hardware = _page_sub_hardware
+
+
+def _select_device(self: SettingsWindow, device: str) -> None:
+    name = dict((k, n) for k, n, _d in DEVICES).get(device, device)
+    self._set("device", device, toast=f"Processador definido: {name}")
+    self._rebuild_page("sub_hardware")
+
+
+def _select_compute(self: SettingsWindow, compute: str) -> None:
+    name = dict((k, n) for k, n, _d in COMPUTE_TYPES).get(compute, compute)
+    self._set("compute_type", compute, toast=f"Precisão definida: {name}")
+    self._rebuild_page("sub_hardware")
+
+
+SettingsWindow._select_device = _select_device
+SettingsWindow._select_compute = _select_compute
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: PROMPT AUXILIAR
+# ---------------------------------------------------------------------------
+
+def _page_sub_prompt(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell("Prompt Auxiliar",
+                                  "Ensine vocabulário, marcas e termos que o modelo deve reconhecer.",
+                                  back_to="dictation")
+
+    card = self._card(body)
+    box = tk.Frame(card, bg=t.card_bg)
+    box.pack(fill="both", expand=True, padx=16, pady=14)
+
+    prompt_text = self._styled_text(box, height=10)
+    prompt_text.pack(fill="both", expand=True)
+    prompt_text.insert("1.0", self._cfg.initial_prompt or "")
+    prompt_text.focus_set()
+
+    def apply_prompt(_event=None) -> None:
+        value = prompt_text.get("1.0", "end-1c").strip()
+        if value != (self._cfg.initial_prompt or ""):
+            self._set("initial_prompt", value, toast="Prompt auxiliar atualizado")
+
+    prompt_text.bind("<FocusOut>", apply_prompt)
+
+    btn_row = tk.Frame(body, bg=t.bg)
+    btn_row.pack(fill="x", pady=(10, 0))
+    self._button(btn_row, "Aplicar Prompt", apply_prompt, "primary").pack(side="right")
+
+    note = tk.Label(
+        body,
+        text="Dica: liste marcas, gírias e termos técnicos exatamente como devem aparecer no texto.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w",
+    )
+    note.pack(fill="x", padx=4, pady=(8, 0))
+    return page
+
+
+SettingsWindow._page_sub_prompt = _page_sub_prompt
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: HESITAÇÕES PERSONALIZADAS
+# ---------------------------------------------------------------------------
+
+def _page_sub_fillers(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell("Hesitações Personalizadas",
+                                  "Termos removidos automaticamente do texto final.",
+                                  back_to="dictation")
+
+    card = self._card(body)
+    row = self._row_base(card, "Termos a Remover",
+                         "Separe por vírgulas. Ex.: tipo assim, né, então")
+    entry = self._styled_entry(row, self._cfg.custom_fillers or "", width=26)
+    entry.grid(row=0, column=1, sticky="e")
+
+    def apply_fillers(_event=None) -> None:
+        value = entry.get().strip()
+        if value != (self._cfg.custom_fillers or ""):
+            self._set("custom_fillers", value, toast="Hesitações personalizadas atualizadas")
+
+    entry.bind("<FocusOut>", apply_fillers)
+    entry.bind("<Return>", apply_fillers)
+
+    note = tk.Label(
+        body,
+        text="Quando preenchida, esta lista substitui as hesitações padrão. "
+             "A remoção só acontece com “Remover Hesitações” ativado.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w",
+        wraplength=620, justify="left",
+    )
+    note.pack(fill="x", padx=4, pady=(8, 0))
+    return page
+
+
+SettingsWindow._page_sub_fillers = _page_sub_fillers
+
+# ---------------------------------------------------------------------------
+# PÁGINA: INTELIGÊNCIA ARTIFICIAL
+# ---------------------------------------------------------------------------
+
+def _page_ai(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["ai"])
+
+    card = self._card(body, "Reescrita Inteligente")
+
+    self._row_toggle(
+        card, "Pós-Processamento Inteligente",
+        "Reescreve o texto com um modelo de linguagem local (Mini-LLM), "
+        "aplicando o estilo escolhido sem enviar nada à nuvem.",
+        self.rewriter_var, "use_llm_rewriter",
+        on_change=lambda _v: self._rebuild_page("ai"),
+    )
+
+    # Status e download do Mini-LLM com percentual real
+    if self.rewriter_var.get():
+        from .rewriter import is_rewriter_downloaded
+        repo_id = self._cfg.llm_model_repo
+        downloaded = is_rewriter_downloaded(repo_id)
+
+        if downloaded:
+            row = self._row_base(card, "Modelo de Reescrita",
+                                 "Mini-LLM instalado e pronto para uso offline.")
+            tk.Label(row, text="✓ Instalado", font=(self.font_name, 9, "bold"),
+                     fg=t.success, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+        elif self._llm_dl_active:
+            row = self._row_base(card, "Baixando Mini-LLM…", None)
+            dl_box = tk.Frame(row, bg=t.card_bg)
+            dl_box.grid(row=0, column=1, sticky="e")
+            self._llm_pct_var = getattr(self, "_llm_pct_var", tk.DoubleVar(value=0.0))
+            bar = ttk.Progressbar(dl_box, orient="horizontal", mode="determinate",
+                                  variable=self._llm_pct_var, maximum=100.0, length=180,
+                                  style="Accent.Horizontal.TProgressbar")
+            bar.pack(side="left")
+            self._llm_pct_label = tk.Label(dl_box, text="0%", width=5, anchor="e",
+                                           font=(self.font_name, 9, "bold"),
+                                           fg=t.accent, bg=t.card_bg)
+            self._llm_pct_label.pack(side="left", padx=(8, 0))
+        else:
+            self._row_action(card, "Modelo de Reescrita",
+                             "Necessário baixar o pacote de IA (~400 MB) uma única vez.",
+                             "Baixar Mini-LLM", lambda: self._start_llm_download(), "primary")
+
+    self._row_nav(card, "Estilo da Transcrição",
+                  "Tom de voz aplicado na reescrita do texto.",
+                  lambda: self._tone_display_name(self._cfg.tone_style), "sub_tone")
+
+    card = self._card(body, "Aprendizado")
+
+    self._row_toggle(
+        card, "Aprendizado Contínuo",
+        "Aprende com as suas notas do diário e prioriza o vocabulário que você mais usa.",
+        self.learning_var, "continuous_learning")
+
+    note = tk.Label(
+        body,
+        text="Todo o processamento é 100% local: nenhum áudio ou texto sai do seu computador.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w",
+    )
+    note.pack(fill="x", padx=4, pady=(10, 0))
+    return page
+
+
+SettingsWindow._page_ai = _page_ai
+
+
+def _tone_display_name(self: SettingsWindow, tone_id: str) -> str:
+    builtin = {k: n for k, n, _d in TONES}
+    return builtin.get(tone_id, tone_id.capitalize())
+
+
+SettingsWindow._tone_display_name = _tone_display_name
+
+
+def _start_llm_download(self: SettingsWindow) -> None:
+    if self._llm_dl_active:
+        return
+    self._llm_dl_active = True
+    self._llm_pct_var = tk.DoubleVar(value=0.0)
+
+    def on_progress(percent: float, downloaded: int, total: int) -> None:
+        def update() -> None:
+            if not self.winfo_exists():
+                return
+            try:
+                self._llm_pct_var.set(percent)
+                if hasattr(self, "_llm_pct_label") and self._llm_pct_label.winfo_exists():
+                    self._llm_pct_label.configure(text=f"{percent:.0f}%")
+            except Exception:
+                pass
+        try:
+            self.after(0, update)
+        except Exception:
+            pass
+
+    def worker() -> None:
+        from .rewriter import _get_model_path
+        repo_id = self._cfg.llm_model_repo
+        error: Exception | None = None
+        try:
+            download_snapshot_with_progress(repo_id, _get_model_path(repo_id), on_progress)
+        except Exception as exc:  # noqa: BLE001
+            error = exc
+
+        def finish() -> None:
+            self._llm_dl_active = False
+            if error is None:
+                self._toast("Mini-LLM instalado com sucesso")
+            else:
+                self._toast(f"Falha ao baixar o Mini-LLM: {error}", kind="error")
+            if self.winfo_exists():
+                self._rebuild_page("ai")
+
+        try:
+            self.after(0, finish)
+        except Exception:
+            pass
+
+    self._rebuild_page("ai")
+    threading.Thread(target=worker, daemon=True).start()
+
+
+SettingsWindow._start_llm_download = _start_llm_download
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: ESTILO DA TRANSCRIÇÃO (tons)
+# ---------------------------------------------------------------------------
+
+def _page_sub_tone(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell("Estilo da Transcrição",
+                                  "Escolha o tom aplicado pelo pós-processamento inteligente.",
+                                  back_to="ai")
+    card = self._card(body)
+
+    custom = self._cfg.custom_tones or {}
+    for tone_id, name, desc in TONES:
+        self._radio_row(card, name, desc,
+                        selected=(self._cfg.tone_style == tone_id),
+                        command=lambda tid=tone_id: self._select_tone(tid))
+
+    for tone_id in custom:
+        self._radio_row(card, tone_id.capitalize(), "Estilo personalizado criado por você.",
+                        selected=(self._cfg.tone_style == tone_id),
+                        command=lambda tid=tone_id: self._select_tone(tid))
+
+    self._row_action(card, "Editor de Estilos",
+                     "Crie novos tons ou ajuste as instruções dos existentes.",
+                     "Abrir Editor", lambda: self._show("sub_tone_editor", update_sidebar=True),
+                     "secondary")
+    return page
+
+
+SettingsWindow._page_sub_tone = _page_sub_tone
+
+
+def _select_tone(self: SettingsWindow, tone_id: str) -> None:
+    self._set("tone_style", tone_id,
+              toast=f"Estilo definido: {self._tone_display_name(tone_id)}")
+    self._rebuild_page("sub_tone")
+
+
+SettingsWindow._select_tone = _select_tone
+
+
+def _page_sub_tone_editor(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell("Editor de Estilos",
+                                  "Ajuste as instruções enviadas ao Whisper e ao Mini-LLM.",
+                                  back_to="sub_tone")
+
+    custom = self._cfg.custom_tones or {}
+    all_tones = [k for k, _n, _d in TONES] + list(custom.keys())
+    selected = tk.StringVar(value=self._cfg.tone_style if self._cfg.tone_style in all_tones else all_tones[0])
+
+    # Seletor do estilo
+    card = self._card(body)
+    row = self._row_base(card, "Estilo Selecionado", None)
+    selector = ThemedDropdown(row, t, self.font_name, selected, all_tones,
+                              command=lambda *_: load_style())
+    selector.grid(row=0, column=1, sticky="e")
+
+    # Prompt do Whisper
+    tk.Label(body, text="PROMPT DO WHISPER (VOCABULÁRIO / REGRAS)",
+             font=(self.font_name, 8, "bold"), fg=t.muted, bg=t.bg, anchor="w").pack(
+        fill="x", padx=4, pady=(14, 6))
+    whisper_text = self._styled_text(body, height=4)
+    whisper_text.pack(fill="x")
+
+    # Instrução do Mini-LLM
+    tk.Label(body, text="INSTRUÇÃO DO MINI-LLM (COMPORTAMENTO DE REESCRITA)",
+             font=(self.font_name, 8, "bold"), fg=t.muted, bg=t.bg, anchor="w").pack(
+        fill="x", padx=4, pady=(14, 6))
+    llm_text = self._styled_text(body, height=5)
+    llm_text.pack(fill="x")
+
+    def load_style() -> None:
+        sel = selected.get()
+        whisper_text.delete("1.0", "end")
+        llm_text.delete("1.0", "end")
+        whisper_text.insert("1.0", custom.get(sel, DEFAULT_WHISPER_PROMPTS.get(sel, "")))
+        llm_text.insert("1.0", self._cfg.llm_custom_tones.get(
+            sel, DEFAULT_LLM_PROMPTS.get(sel, "Reescreva o texto com clareza.")))
+
+    def create_style() -> None:
+        from tkinter import simpledialog
+        name = simpledialog.askstring("Novo Estilo", "Nome do novo estilo:", parent=self)
+        if not name or not name.strip():
+            return
+        name = name.strip().lower()
+        if name not in all_tones:
+            all_tones.append(name)
+            selector.configure_values(all_tones)
+        selected.set(name)
+        load_style()
+
+    def save_style() -> None:
+        sel = selected.get()
+        self._cfg.custom_tones[sel] = whisper_text.get("1.0", "end-1c").strip()
+        self._cfg.llm_custom_tones[sel] = llm_text.get("1.0", "end-1c").strip()
+        self._set("custom_tones", self._cfg.custom_tones)
+        self._set("llm_custom_tones", self._cfg.llm_custom_tones,
+                  toast=f"Estilo “{sel}” salvo")
+        if self._cfg.tone_style not in all_tones:
+            self._cfg.tone_style = sel
+        self._rebuild_page("sub_tone_editor")
+
+    btn_row = tk.Frame(body, bg=t.bg)
+    btn_row.pack(fill="x", pady=(14, 0))
+    self._button(btn_row, "Novo Estilo", create_style, "secondary").pack(side="left")
+    self._button(btn_row, "Salvar Estilo", save_style, "primary").pack(side="right")
+
+    load_style()
+    return page
+
+
+SettingsWindow._page_sub_tone_editor = _page_sub_tone_editor
+
+
+class ThemedDropdown(tk.Frame):
+    """Dropdown temático simples baseado em Menu, no padrão visual do app."""
+
+    def __init__(self, parent: tk.Widget, theme: Theme, font_name: str,
+                 variable: tk.StringVar, values: list[str],
+                 command: Callable[[], None] | None = None, width: int = 22) -> None:
+        super().__init__(parent, bg=theme.input_bg, highlightthickness=1,
+                         highlightbackground=theme.border)
+        self.theme = theme
+        self.variable = variable
+        self.values = list(values)
+        self.command = command
+
+        self.btn = tk.Label(self, textvariable=self.variable, bg=theme.input_bg,
+                            fg=theme.text, font=(font_name, 10), anchor="w",
+                            padx=10, pady=6, width=width, cursor="hand2")
+        self.btn.pack(side="left", fill="both", expand=True)
+        arrow = tk.Label(self, text="▾", bg=theme.input_bg, fg=theme.muted,
+                         font=(font_name, 10))
+        arrow.pack(side="right", padx=(0, 8))
+        for w in (self.btn, arrow):
+            w.bind("<Button-1>", lambda _e: self._show_menu())
+
+        self.menu = tk.Menu(self, tearoff=0, bg=theme.card_bg, fg=theme.text,
+                            activebackground=theme.accent,
+                            activeforeground=theme.on_accent,
+                            font=(font_name, 10), bd=0)
+        self._rebuild_menu()
+
+    def _rebuild_menu(self) -> None:
+        self.menu.delete(0, "end")
+        for value in self.values:
+            self.menu.add_command(label=value, command=lambda v=value: self._select(v))
+
+    def _select(self, value: str) -> None:
+        self.variable.set(value)
+        if self.command:
+            self.command()
+
+    def _show_menu(self) -> None:
+        x = self.winfo_rootx()
+        y = self.winfo_rooty() + self.winfo_height()
+        try:
+            self.menu.tk_popup(x, y)
+        finally:
+            self.menu.grab_release()
+
+    def configure_values(self, values: list[str]) -> None:
+        self.values = list(values)
+        self._rebuild_menu()
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: MICROFONE E ÁUDIO
+# ---------------------------------------------------------------------------
+
+def _page_audio(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["audio"])
+
+    card = self._card(body, "Entrada de Áudio")
+
+    self._row_nav(card, "Microfone",
+                  "Dispositivo usado para capturar a sua voz.",
+                  lambda: self._cfg.audio_device or "Padrão do Sistema", "sub_mic")
+
+    self._row_toggle(card, "Aprimorar Áudio",
+                     "Filtro de graves, redução de ruído e normalização de volume "
+                     "antes da transcrição (modo streaming).",
+                     self.audio_enhance_var, "audio_enhance")
+
+    self._row_nav(card, "Perfil de Aprimoramento",
+                  "Intensidade do processamento de áudio.",
+                  lambda: dict((k, n) for k, n, _d in ENHANCE_PROFILES).get(
+                      self._cfg.audio_enhance_profile, "Equilibrado"),
+                  "sub_profile")
+
+    # Status dos filtros
+    nr_ok = (importlib.util.find_spec("noisereduce") is not None
+             and importlib.util.find_spec("scipy") is not None)
+    status_text = ("✓ Filtros inteligentes de ruído disponíveis" if nr_ok
+                   else "⚠ noisereduce não instalado — apenas normalização de volume")
+    status_color = t.success if nr_ok else t.warning
+    row = self._row_base(card, "Filtros de Ruído", None)
+    tk.Label(row, text=status_text, font=(self.font_name, 8, "bold"),
+             fg=status_color, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+
+    card = self._card(body, "Streaming em Tempo Real")
+
+    self._row_toggle(card, "Modo Streaming Contínuo",
+                     "Transcreve em blocos enquanto você fala, mostrando o texto em tempo real.",
+                     self.streaming_var, "streaming_mode")
+
+    self._row_nav(card, "Silêncio para Corte",
+                  "Pausa necessária para separar os blocos de fala.",
+                  lambda: f"{self._cfg.stream_min_silence_ms} ms", "sub_silence")
+
+    silero_ok = (importlib.util.find_spec("torch") is not None
+                 and importlib.util.find_spec("silero_vad") is not None)
+    vad_text = "✓ Silero VAD (alta qualidade)" if silero_ok else "⚠ VAD por energia (básico)"
+    vad_color = t.success if silero_ok else t.warning
+    row = self._row_base(card, "Detecção de Fala (VAD)",
+                         "Motor que identifica quando você está falando.")
+    tk.Label(row, text=vad_text, font=(self.font_name, 8, "bold"),
+             fg=vad_color, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+
+    card = self._card(body, "Efeitos Sonoros")
+
+    self._row_toggle(card, "Efeitos Sonoros",
+                     "Toca sons suaves ao iniciar, concluir e cancelar o ditado.",
+                     self.sounds_var, "play_sounds",
+                     on_change=lambda _v: self._rebuild_page("audio"))
+
+    if self.sounds_var.get():
+        row = self._row_base(card, "Volume dos Efeitos", None)
+        vol_box = tk.Frame(row, bg=t.card_bg)
+        vol_box.grid(row=0, column=1, sticky="e")
+
+        self._vol_pct = tk.Label(vol_box, text=f"{int(self._cfg.sound_volume * 100)}%",
+                                 font=(self.font_name, 9, "bold"), fg=t.muted,
+                                 bg=t.card_bg, width=4, anchor="e")
+        self._vol_pct.pack(side="right", padx=(8, 0))
+
+        slider = tk.Scale(
+            vol_box, from_=0.0, to=1.0, resolution=0.05, orient="horizontal",
+            variable=self.sound_volume_var, showvalue=False, length=160,
+            bg=t.card_bg, fg=t.text, troughcolor=t.track,
+            activebackground=t.accent, highlightthickness=0, bd=0,
+            command=self._on_volume_change,
+        )
+        slider.pack(side="right")
+
+    return page
+
+
+SettingsWindow._page_audio = _page_audio
+
+
+def _on_volume_change(self: SettingsWindow, _raw=None) -> None:
+    # Grava o volume diretamente do DoubleVar (não depende de widget preguiçoso)
+    self._cfg.sound_volume=float(self.sound_volume_var.get())
+    try:
+        self.on_save_callback(self._cfg)
+        self._vol_pct.configure(text=f"{int(self._cfg.sound_volume * 100)}%")
+    except Exception:
+        pass
+
+
+SettingsWindow._on_volume_change = _on_volume_change
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINA: MICROFONE (seleção + teste em tempo real)
+# ---------------------------------------------------------------------------
+
+def _page_sub_mic(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell("Microfone",
+                                  "Escolha o dispositivo de entrada e teste o nível do sinal.",
+                                  back_to="audio")
+
+    devices = getattr(self, "_mic_devices", None)
+    if devices is None:
+        devices = ["Padrão do Sistema"]
+        current = self._cfg.audio_device
+        if current and current not in devices:
+            devices.append(current)
+        self._mic_devices = devices
+        threading.Thread(target=self._load_mic_devices, daemon=True).start()
+
+    card = self._card(body, "Dispositivo de Entrada")
+    for name in devices:
+        current = self._cfg.audio_device or "Padrão do Sistema"
+        self._radio_row(card, name, None,
+                        selected=(current == name),
+                        command=lambda n=name: self._select_mic(n))
+
+    card = self._card(body, "Teste do Microfone")
+    row = self._row_base(card, "Nível do Sinal",
+                         "Fale próximo ao microfone e observe o medidor.")
+    test_box = tk.Frame(row, bg=t.card_bg)
+    test_box.grid(row=0, column=1, sticky="e")
+
+    self.meter_canvas = tk.Canvas(test_box, width=170, height=20, bg=t.input_bg,
+                                  highlightthickness=1, highlightbackground=t.border)
+    self.meter_canvas.pack(side="left", padx=(0, 10))
+    self.meter_bar = self.meter_canvas.create_rectangle(1, 1, 1, 19, fill=t.accent, outline="")
+
+    self.test_btn = self._button(test_box, "Iniciar Teste", self._toggle_test_stream, "secondary")
+    self.test_btn.pack(side="left")
+    return page
+
+
+SettingsWindow._page_sub_mic = _page_sub_mic
+
+
+def _load_mic_devices(self: SettingsWindow) -> None:
+    try:
+        import sounddevice as sd
+        found = ["Padrão do Sistema"]
+        for d in sd.query_devices():
+            if d.get("max_input_channels", 0) > 0 and d["name"] not in found:
+                found.append(d["name"])
+        current = self._cfg.audio_device
+        if current and current not in found:
+            found.append(current)
+        self._mic_devices = found
+        if self.winfo_exists():
+            self.after(0, lambda: self._rebuild_page("sub_mic")
+                       if self._current_page == "sub_mic" else None)
+    except Exception:
+        pass
+
+
+SettingsWindow._load_mic_devices = _load_mic_devices
+
+
+def _select_mic(self: SettingsWindow, name: str) -> None:
+    value = "" if name == "Padrão do Sistema" else name
+    self._set("audio_device", value, toast=f"Microfone definido: {name}")
+    if self._test_stream_active:
+        self._start_test_stream()
+    self._rebuild_page("sub_mic")
+
+
+SettingsWindow._select_mic = _select_mic
+
+
+def _toggle_test_stream(self: SettingsWindow) -> None:
+    if self._test_stream_active:
+        self._stop_test_stream()
+        try:
+            self.test_btn.configure(text="Iniciar Teste")
+            self.meter_canvas.coords(self.meter_bar, 1, 1, 1, 19)
+        except Exception:
+            pass
+    else:
+        self._start_test_stream()
+        if self._test_stream:
+            self.test_btn.configure(text="Parar Teste")
+            self._update_test_meter()
+
+
+SettingsWindow._toggle_test_stream = _toggle_test_stream
+
+
+def _start_test_stream(self: SettingsWindow) -> None:
+    self._stop_test_stream()
+    from .audio import get_device_index_by_name
+    device_index = get_device_index_by_name(self._cfg.audio_device or "Padrão do Sistema")
+
+    import numpy as np
+    import sounddevice as sd
+
+    self._test_amplitude = 0.0
+    self._test_stream_active = True
+
+    def callback(indata, frames, time_info, status):
+        if not self._test_stream_active or status.input_overflow or len(indata) == 0:
+            return
+        rms = np.sqrt(np.mean(indata.astype(np.float32) ** 2))
+        self._test_amplitude = float(rms / 32768.0)
+
+    try:
+        self._test_stream = sd.InputStream(device=device_index, samplerate=16000,
+                                           channels=1, dtype="int16", callback=callback)
+        self._test_stream.start()
+    except Exception as error:
+        self._toast(f"Erro no microfone: {error}", kind="error")
+        self._test_stream = None
+        self._test_stream_active = False
+
+
+SettingsWindow._start_test_stream = _start_test_stream
+
+
+def _stop_test_stream(self: SettingsWindow) -> None:
+    self._test_stream_active = False
+    stream = getattr(self, "_test_stream", None)
+    if stream:
+        try:
+            stream.stop()
+            stream.close()
+        except Exception:
+            pass
+        self._test_stream = None
+
+
+SettingsWindow._stop_test_stream = _stop_test_stream
+
+
+def _update_test_meter(self: SettingsWindow) -> None:
+    if not self._test_stream_active:
+        return
+    amp_clean = max(0.0, self._test_amplitude - 0.0015)
+    target_amp = min(1.0, amp_clean * 300.0)
+    self._smooth_level = self._smooth_level * 0.7 + target_amp * 0.3
+    try:
+        max_w = self.meter_canvas.winfo_width() - 2
+        w = int(self._smooth_level * max_w)
+        self.meter_canvas.coords(self.meter_bar, 1, 1, 1 + w, 19)
+    except Exception:
+        pass
+    self.after(40, self._update_test_meter)
+
+
+SettingsWindow._update_test_meter = _update_test_meter
+
+
+# ---------------------------------------------------------------------------
+# SUBPÁGINAS: PERFIL DE APRIMORAMENTO / SILÊNCIO
+# ---------------------------------------------------------------------------
+
+def _page_sub_profile(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell("Perfil de Aprimoramento",
+                                  "Quanto processamento é aplicado ao áudio antes de transcrever.",
+                                  back_to="audio")
+    card = self._card(body)
+    for profile_id, name, desc in ENHANCE_PROFILES:
+        self._radio_row(card, name, desc,
+                        selected=(self._cfg.audio_enhance_profile == profile_id),
+                        command=lambda p=profile_id: self._select_profile(p))
+    return page
+
+
+SettingsWindow._page_sub_profile = _page_sub_profile
+
+
+def _select_profile(self: SettingsWindow, profile_id: str) -> None:
+    name = dict((k, n) for k, n, _d in ENHANCE_PROFILES).get(profile_id, profile_id)
+    self._set("audio_enhance_profile", profile_id, toast=f"Perfil definido: {name}")
+    self._rebuild_page("sub_profile")
+
+
+SettingsWindow._select_profile = _select_profile
+
+
+def _page_sub_silence(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    page, body = self._page_shell("Silêncio para Corte",
+                                  "Tempo de pausa que separa os blocos de ditado no streaming.",
+                                  back_to="audio")
+    card = self._card(body)
+    for ms, label in SILENCE_OPTIONS:
+        self._radio_row(card, label, None,
+                        selected=(self._cfg.stream_min_silence_ms == ms),
+                        command=lambda v=ms: self._select_silence(v))
+    return page
+
+
+SettingsWindow._page_sub_silence = _page_sub_silence
+
+
+def _select_silence(self: SettingsWindow, ms: int) -> None:
+    self._set("stream_min_silence_ms", ms, toast=f"Silêncio para corte: {ms} ms")
+    self._rebuild_page("sub_silence")
+
+
+SettingsWindow._select_silence = _select_silence
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: ATALHOS
+# ---------------------------------------------------------------------------
+
+def _page_shortcuts(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["shortcuts"])
+
+    card = self._card(body, "Atalhos Globais")
+
+    self._hotkey_row(card, "Ditado Normal",
+                     "Inicia e para a gravação, colando o texto no cursor.",
+                     "hotkey", required=True)
+    self._hotkey_row(card, "Ditado + Traduzir",
+                     "Dita em qualquer idioma e cola o texto traduzido para o inglês.",
+                     "hotkey_translate")
+    self._hotkey_row(card, "Ditado + Enviar",
+                     "Cola o texto e pressiona Enter automaticamente.",
+                     "hotkey_auto_send")
+    self._hotkey_row(card, "Ditado + Quantum Brain",
+                     "Envia o ditado direto para as suas notas do Quantum Brain.",
+                     "hotkey_quantum_brain")
+
+    note = tk.Label(
+        body,
+        text="Use o formato Ctrl+Shift+Tecla. Deixe em branco para desativar um atalho opcional. "
+             "A tecla Esc sempre cancela a gravação em andamento.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg, anchor="w",
+        wraplength=620, justify="left",
+    )
+    note.pack(fill="x", padx=4, pady=(10, 0))
+    return page
+
+
+SettingsWindow._page_shortcuts = _page_shortcuts
+
+
+def _hotkey_row(self: SettingsWindow, card: tk.Frame, label: str, desc: str,
+                field: str, required: bool = False) -> None:
+    row = self._row_base(card, label, desc)
+    entry = self._styled_entry(row, getattr(self._cfg, field, "") or "", width=22)
+    entry.grid(row=0, column=1, sticky="e")
+
+    def apply(_event=None) -> None:
+        value = entry.get().strip()
+        if value == (getattr(self._cfg, field, "") or ""):
+            return
+        if not value:
+            if required:
+                entry.delete(0, "end")
+                entry.insert(0, getattr(self._cfg, field, ""))
+                self._toast("O atalho principal não pode ficar vazio", kind="error")
+                return
+            self._set(field, "", toast=f"Atalho “{label}” desativado", toast_kind="info")
+            return
+        try:
+            _parse_hotkey(value)
+        except ValueError as exc:
+            entry.delete(0, "end")
+            entry.insert(0, getattr(self._cfg, field, "") or "")
+            self._toast(f"Atalho inválido: {exc}", kind="error")
+            return
+        self._set(field, value, toast=f"Atalho “{label}” atualizado")
+
+    entry.bind("<FocusOut>", apply)
+    entry.bind("<Return>", apply)
+
+
+SettingsWindow._hotkey_row = _hotkey_row
+
+# ---------------------------------------------------------------------------
+# PÁGINA: QUANTUM BRAIN
+# ---------------------------------------------------------------------------
+
+def _page_brain(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["brain"])
+
+    card = self._card(body, "Segundo Cérebro")
+
+    self._row_toggle(card, "Ativar Quantum Brain",
+                     "Captura pensamentos ditados como notas e os compila em projetos e insights.",
+                     self.quantum_brain_enabled_var, "quantum_brain_enabled",
+                     on_change=lambda _v: self._rebuild_page("brain"))
+
+    if self.quantum_brain_enabled_var.get():
+        self._row_toggle(card, "Também Colar no Cursor",
+                         "Além de salvar a nota, insere o texto no cursor como no ditado normal.",
+                         self.quantum_brain_also_paste_var, "quantum_brain_also_paste")
+
+        interval_var = tk.StringVar(value=f"{self._cfg.quantum_brain_sync_interval_min} min")
+        row = self._row_base(card, "Intervalo de Síntese",
+                             "Tempo máximo entre compilações automáticas das notas.")
+        interval_dd = ThemedDropdown(
+            row, t, self.font_name, interval_var,
+            [f"{v} min" for v in (15, 30, 45, 60, 120)],
+            command=lambda: self._set(
+                "quantum_brain_sync_interval_min",
+                int(interval_var.get().replace(" min", "")),
+                toast="Intervalo de síntese atualizado"),
+            width=10)
+        interval_dd.grid(row=0, column=1, sticky="e")
+
+        threshold_var = tk.StringVar(value=f"{self._cfg.quantum_brain_sync_threshold} notas")
+        row = self._row_base(card, "Notas para Síntese Imediata",
+                             "Quantidade de notas pendentes que dispara uma síntese na hora.")
+        threshold_dd = ThemedDropdown(
+            row, t, self.font_name, threshold_var,
+            [f"{v} notas" for v in (3, 5, 10, 15, 25)],
+            command=lambda: self._set(
+                "quantum_brain_sync_threshold",
+                int(threshold_var.get().replace(" notas", "")),
+                toast="Limite de notas atualizado"),
+            width=10)
+        threshold_dd.grid(row=0, column=1, sticky="e")
+
+        card = self._card(body, "Atividade")
+        stats_frame = tk.Frame(card, bg=t.card_bg)
+        stats_frame.pack(fill="x", padx=16, pady=12)
+        self.stats_label = tk.Label(
+            stats_frame, text="Carregando estatísticas…",
+            font=(self.font_name, 9), fg=t.text, bg=t.card_bg,
+            justify="left", anchor="w",
+        )
+        self.stats_label.pack(anchor="w", fill="x")
+        self._update_quantum_brain_stats()
+
+        self._row_action(card, "Pasta de Notas",
+                         "Abra o diretório onde as notas e sínteses são gravadas.",
+                         "Abrir Pasta", self._open_quantum_brain_folder, "secondary")
+
+        self._row_action(card, "Síntese Manual",
+                         "Compila imediatamente todas as notas pendentes.",
+                         "Sintetizar Agora", self._trigger_manual_synthesis, "primary")
+
+    return page
+
+
+SettingsWindow._page_brain = _page_brain
+
+
+def _open_quantum_brain_folder(self: SettingsWindow) -> None:
+    try:
+        from .quantum_brain import quantum_brain_dir
+        os.startfile(str(quantum_brain_dir(self._cfg)))
+    except Exception as error:
+        self._toast(f"Não foi possível abrir a pasta: {error}", kind="error")
+
+
+SettingsWindow._open_quantum_brain_folder = _open_quantum_brain_folder
+
+
+def _trigger_manual_synthesis(self: SettingsWindow) -> None:
+    try:
+        from .quantum_brain import QuantumBrainOrchestrator
+        orchestrator = QuantumBrainOrchestrator.get_instance(self._cfg)
+
+        def run_sync() -> None:
+            try:
+                orchestrator._trigger_synthesis()
+                self.after(0, lambda: self._toast("Síntese concluída"))
+            except Exception as error:
+                message = str(error)
+                self.after(0, lambda m=message: self._toast(f"Falha na síntese: {m}", kind="error"))
+            finally:
+                self.after(1500, lambda: self._update_quantum_brain_stats()
+                           if self.winfo_exists() else None)
+
+        self._toast("Sintetizando notas em segundo plano…", kind="info")
+        threading.Thread(target=run_sync, daemon=True).start()
+    except Exception as error:
+        self._toast(f"Erro: {error}", kind="error")
+
+
+SettingsWindow._trigger_manual_synthesis = _trigger_manual_synthesis
+
+
+def _update_quantum_brain_stats(self: SettingsWindow) -> None:
+    if not hasattr(self, "stats_label") or self.stats_label is None:
+        return
+    try:
+        if not self.stats_label.winfo_exists():
+            return
+    except Exception:
+        return
+    try:
+        from .quantum_brain import QuantumBrainOrchestrator
+        orchestrator = QuantumBrainOrchestrator.get_instance(self._cfg)
+        stats = orchestrator.get_stats()
+
+        last = "Nunca"
+        if stats["last_synthesis"]:
+            import datetime
+            last = datetime.datetime.fromtimestamp(stats["last_synthesis"]).strftime("%d/%m/%Y %H:%M")
+
+        self.stats_label.configure(
+            text=f"•  Notas aguardando síntese: {stats['unsynthesized']}\n"
+                 f"•  Projetos ativos mapeados: {stats['projects']}\n"
+                 f"•  Última síntese: {last}")
+    except Exception as error:
+        try:
+            self.stats_label.configure(text=f"Estatísticas indisponíveis: {error}")
+        except Exception:
+            pass
+
+
+SettingsWindow._update_quantum_brain_stats = _update_quantum_brain_stats
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: ARMAZENAMENTO (histórico + backups)
+# ---------------------------------------------------------------------------
+
+def _page_storage(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["storage"])
+
+    # --- Histórico de transcrições ---
+    card = self._card(body, "Histórico de Transcrições")
+
+    log_view = tk.Frame(card, bg=t.input_bg, highlightthickness=1,
+                        highlightbackground=t.border)
+    log_view.pack(fill="x", padx=16, pady=(14, 6))
+
+    self.logs_text = tk.Text(log_view, height=6, bg=t.input_bg, fg=t.text,
+                             font=(self.font_name, 9), relief="flat", bd=0,
+                             state="disabled")
+    logs_scroll = ttk.Scrollbar(log_view, command=self.logs_text.yview,
+                                style="Vertical.TScrollbar")
+    self.logs_text.configure(yscrollcommand=logs_scroll.set)
+    self.logs_text.tag_config("link", foreground=t.accent, underline=True)
+    self.logs_text.tag_bind("link", "<Enter>",
+                            lambda _e: self.logs_text.config(cursor="hand2"))
+    self.logs_text.tag_bind("link", "<Leave>",
+                            lambda _e: self.logs_text.config(cursor=""))
+    self.logs_text.tag_bind("link", "<Button-1>", self._on_transcription_clicked)
+    self.logs_text.pack(side="left", fill="both", expand=True, padx=8, pady=6)
+    logs_scroll.pack(side="right", fill="y")
+
+    self._row_action(card, "Pasta do Histórico",
+                     f"Gravado em {diary_dir()}",
+                     "Abrir Pasta", lambda: os.startfile(diary_dir()), "secondary")
+
+    self._row_action(card, "Apagar Histórico",
+                     "Remove permanentemente todas as transcrições salvas.",
+                     "Apagar Tudo", self._delete_all_transcriptions, "danger")
+
+    # --- Backups ---
+    card = self._card(body, "Backup e Restauração")
+
+    row = self._row_base(card, "Novo Backup",
+                         "Um arquivo ZIP com o código e, opcionalmente, seus dados.")
+    backup_box = tk.Frame(row, bg=t.card_bg)
+    backup_box.grid(row=0, column=1, sticky="e")
+
+    code_only_chk = tk.Checkbutton(
+        backup_box, text="Apenas código", variable=self.code_only_var,
+        bg=t.card_bg, fg=t.text, activebackground=t.card_bg,
+        activeforeground=t.text, selectcolor=t.input_bg,
+        font=(self.font_name, 9),
+    )
+    code_only_chk.pack(side="left", padx=(0, 10))
+    self._button(backup_box, "Criar Backup", self._on_create_backup_clicked,
+                 "primary").pack(side="left")
+
+    self._row_action(card, "Restaurar de Arquivo",
+                     "Recupera um backup ZIP salvo em outra pasta.",
+                     "Escolher Arquivo…", self._on_restore_file_clicked, "secondary")
+
+    table_frame = tk.Frame(card, bg=t.input_bg, highlightthickness=1,
+                           highlightbackground=t.border)
+    table_frame.pack(fill="x", padx=16, pady=(6, 6))
+
+    columns = ("filename", "type", "version", "datetime", "size")
+    self.backup_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=5)
+    self.backup_tree.heading("filename", text="Arquivo")
+    self.backup_tree.heading("type", text="Tipo")
+    self.backup_tree.heading("version", text="Versão")
+    self.backup_tree.heading("datetime", text="Data/Hora")
+    self.backup_tree.heading("size", text="Tamanho")
+    self.backup_tree.column("filename", width=170, minwidth=100)
+    self.backup_tree.column("type", width=90, minwidth=70, anchor="center")
+    self.backup_tree.column("version", width=60, minwidth=40, anchor="center")
+    self.backup_tree.column("datetime", width=120, minwidth=90, anchor="center")
+    self.backup_tree.column("size", width=80, minwidth=50, anchor="e")
+    tree_scroll = ttk.Scrollbar(table_frame, orient="vertical",
+                                command=self.backup_tree.yview, style="Vertical.TScrollbar")
+    self.backup_tree.configure(yscrollcommand=tree_scroll.set)
+    self.backup_tree.pack(side="left", fill="both", expand=True)
+    tree_scroll.pack(side="right", fill="y")
+
+    row = self._row_base(card, "Backup Selecionado",
+                         "Gerencie o item marcado na tabela acima.")
+    sel_box = tk.Frame(row, bg=t.card_bg)
+    sel_box.grid(row=0, column=1, sticky="e")
+    self._button(sel_box, "Restaurar", self._on_restore_selected_clicked,
+                 "secondary").pack(side="left", padx=(0, 6))
+    self._button(sel_box, "Excluir", self._on_delete_selected_clicked,
+                 "danger").pack(side="left")
+
+    self._refresh_transcriptions_list()
+    self._refresh_backups_list()
+    return page
+
+
+SettingsWindow._page_storage = _page_storage
+
+
+def _refresh_transcriptions_list(self: SettingsWindow) -> None:
+    if not hasattr(self, "logs_text") or self.logs_text is None:
+        return
+    try:
+        if not self.logs_text.winfo_exists():
+            return
+    except Exception:
+        return
+    self.logs_text.configure(state="normal")
+    self.logs_text.delete("1.0", "end")
+    self._listed_files = []
+
+    files = glob.glob(os.path.join(diary_dir(), "*.md"))
+    files.sort(reverse=True)
+
+    if not files:
+        self.logs_text.insert("end", "Nenhuma transcrição salva ainda.\n")
+    else:
+        for f in files:
+            basename = os.path.basename(f)
+            try:
+                with open(f, "r", encoding="utf-8") as f_obj:
+                    entries = sum(1 for line in f_obj if line.startswith("## "))
+            except Exception:
+                entries = 0
+            self._listed_files.append(f)
+            self.logs_text.insert("end", f"📄 {basename:<25} {entries} entrada(s)\n", "link")
+
+    self.logs_text.configure(state="disabled")
+
+
+SettingsWindow._refresh_transcriptions_list = _refresh_transcriptions_list
+
+
+def _on_transcription_clicked(self: SettingsWindow, event) -> None:
+    index_str = self.logs_text.index(f"@{event.x},{event.y}")
+    line_num = int(index_str.split(".")[0]) - 1
+    if 0 <= line_num < len(self._listed_files):
+        file_path = self._listed_files[line_num]
+        if os.path.exists(file_path):
+            try:
+                os.startfile(file_path)
+            except Exception as error:
+                self._toast(f"Não foi possível abrir: {error}", kind="error")
+
+
+SettingsWindow._on_transcription_clicked = _on_transcription_clicked
+
+
+def _delete_all_transcriptions(self: SettingsWindow) -> None:
+    if messagebox.askyesno(
+            "Apagar Histórico",
+            "Tem certeza que deseja apagar permanentemente todas as transcrições salvas?",
+            parent=self):
+        files = glob.glob(os.path.join(diary_dir(), "*.md"))
+        for f in files:
+            try:
+                os.remove(f)
+            except Exception:
+                pass
+        self._refresh_transcriptions_list()
+        self._toast("Histórico apagado com sucesso")
+
+
+SettingsWindow._delete_all_transcriptions = _delete_all_transcriptions
+
+
+def _refresh_backups_list(self: SettingsWindow) -> None:
+    if not hasattr(self, "backup_tree") or self.backup_tree is None:
+        return
+    try:
+        if not self.backup_tree.winfo_exists():
+            return
+    except Exception:
+        return
+    self.backup_tree.delete(*self.backup_tree.get_children())
+    self._backup_items_map.clear()
+    try:
+        backups = list_backups()
+        if not backups:
+            self.backup_tree.insert("", "end", values=("Nenhum backup encontrado.", "-", "-", "-", "-"))
+        else:
+            for b in backups:
+                item_id = self.backup_tree.insert("", "end", values=(
+                    b["filename"],
+                    "Apenas Código" if b["code_only"] else "Completo",
+                    b["version"],
+                    b["datetime"],
+                    f"{b['size_kb']:.1f} KB",
+                ))
+                self._backup_items_map[item_id] = b
+    except Exception as error:
+        self._toast(f"Erro ao listar backups: {error}", kind="error")
+
+
+SettingsWindow._refresh_backups_list = _refresh_backups_list
+
+
+def _on_create_backup_clicked(self: SettingsWindow) -> None:
+    try:
+        code_only = self.code_only_var.get()
+        zip_path, elapsed, size = create_backup(code_only=code_only)
+        self._toast(f"Backup criado: {zip_path.name} ({size / (1024 * 1024):.1f} MB em {elapsed:.1f}s)")
+    except Exception as error:
+        self._toast(f"Erro ao criar backup: {error}", kind="error")
+    finally:
+        self._refresh_backups_list()
+
+
+SettingsWindow._on_create_backup_clicked = _on_create_backup_clicked
+
+
+def _on_restore_file_clicked(self: SettingsWindow) -> None:
+    from tkinter import filedialog
+
+    file_path_str = filedialog.askopenfilename(
+        initialdir=str(Path(get_project_root()) / "backups"),
+        title="Selecionar Backup para Restaurar",
+        filetypes=[("Arquivos Zip", "*.zip")],
+        parent=self,
+    )
+    if not file_path_str:
+        return
+    zip_path = Path(file_path_str)
+    if not zip_path.exists():
+        return
+    self._confirm_restore(zip_path)
+
+
+SettingsWindow._on_restore_file_clicked = _on_restore_file_clicked
+
+
+def _on_restore_selected_clicked(self: SettingsWindow) -> None:
+    selected = self.backup_tree.selection()
+    if not selected:
+        self._toast("Selecione um backup na tabela para restaurar", kind="info")
+        return
+    backup_data = self._backup_items_map.get(selected[0])
+    if backup_data:
+        self._confirm_restore(backup_data["path"])
+
+
+SettingsWindow._on_restore_selected_clicked = _on_restore_selected_clicked
+
+
+def _confirm_restore(self: SettingsWindow, zip_path: Path) -> None:
+    is_code = zip_path.name.endswith("_code.zip")
+    type_desc = "apenas os arquivos de código" if is_code else "o código e as configurações pessoais"
+    confirm = messagebox.askyesno(
+        "Confirmar Restauração",
+        f"Restaurar {type_desc} do backup '{zip_path.name}'?\n\n"
+        "Os arquivos atuais serão substituídos e o aplicativo deverá ser reiniciado.",
+        parent=self,
+    )
+    if not confirm:
+        return
+    try:
+        restore_backup(zip_path)
+        messagebox.showinfo(
+            "Restauração Concluída",
+            "Backup restaurado com sucesso!\n\n"
+            "Feche e abra o Quantum Scribe para carregar os arquivos restaurados.",
+            parent=self,
+        )
+    except Exception as error:
+        self._toast(f"Falha ao restaurar: {error}", kind="error")
+
+
+SettingsWindow._confirm_restore = _confirm_restore
+
+
+def _on_delete_selected_clicked(self: SettingsWindow) -> None:
+    selected = self.backup_tree.selection()
+    if not selected:
+        self._toast("Selecione um backup na tabela para excluir", kind="info")
+        return
+    backup_data = self._backup_items_map.get(selected[0])
+    if not backup_data:
+        return
+    zip_path = backup_data["path"]
+    confirm = messagebox.askyesno(
+        "Excluir Backup",
+        f"Excluir permanentemente o backup '{zip_path.name}'?",
+        parent=self,
+    )
+    if not confirm:
+        return
+    try:
+        delete_backup(zip_path)
+        self._refresh_backups_list()
+        self._toast("Backup excluído")
+    except Exception as error:
+        self._toast(f"Erro ao excluir: {error}", kind="error")
+
+
+SettingsWindow._on_delete_selected_clicked = _on_delete_selected_clicked
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: SOBRE
+# ---------------------------------------------------------------------------
+
+def _page_about(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    t = self.theme
+    page, body = self._page_shell(*self.SECTION_TITLES["about"])
+
+    card = self._card(body)
+    row_id = tk.Frame(card, bg=t.card_bg)
+    row_id.pack(fill="x", padx=18, pady=18)
+
+    if self._icon_img is not None:
+        try:
+            self._logo_photo = ImageTk.PhotoImage(
+                self._icon_img.resize((64, 64), Image.Resampling.LANCZOS))
+            tk.Label(row_id, image=self._logo_photo, bg=t.card_bg).pack(side="left")
+        except Exception:
+            pass
+
+    text_block = tk.Frame(row_id, bg=t.card_bg)
+    text_block.pack(side="left", padx=(16, 0))
+
+    from . import __version__
+    tk.Label(text_block, text="Quantum Scribe", font=(self.font_name, 17, "bold"),
+             fg=t.text, bg=t.card_bg).pack(anchor="w")
+    tk.Label(text_block, text=f"Versão {__version__}", font=(self.font_name, 10, "bold"),
+             fg=t.accent, bg=t.card_bg).pack(anchor="w", pady=(2, 4))
+    tk.Label(text_block, text="Transcrição de voz privada e offline com inteligência artificial.",
+             font=(self.font_name, 9), fg=t.muted, bg=t.card_bg).pack(anchor="w")
+
+    card = self._card(body, "Detalhes do Sistema")
+
+    import sys
+    row = self._row_base(card, "Interpretador Python", None)
+    tk.Label(row, text=sys.version.split(" ")[0], font=(self.font_name, 9, "bold"),
+             fg=t.text, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+
+    row = self._row_base(card, "Versão do Tk/Tcl", None)
+    tk.Label(row, text=str(self.tk.call("info", "patchlevel")),
+             font=(self.font_name, 9, "bold"),
+             fg=t.text, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+
+    row = self._row_base(card, "Diretório de Instalação", str(get_project_root()))
+    self._button(row, "Abrir Pasta", lambda: os.startfile(get_project_root()),
+                 "secondary").grid(row=0, column=1, sticky="e")
+
+    tk.Label(
+        body,
+        text="Desenvolvido por Natan Melquiades.\n"
+             "Quantum Scribe utiliza CTranslate2, faster-whisper e sounddevice.",
+        font=(self.font_name, 8, "italic"), fg=t.muted, bg=t.bg,
+        justify="center", pady=16,
+    ).pack(fill="x")
+    return page
+
+
+SettingsWindow._page_about = _page_about
