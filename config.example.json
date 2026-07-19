@@ -4,7 +4,7 @@
   "device": "auto",
   "compute_type": "auto",
   "preload_model": false,
-  "auto_download_model": true,
+  "auto_download_model": false,
   "auto_paste": true,
   "hotkey": "Ctrl+Space",
   "hotkey_translate": "Ctrl+Alt+Space",

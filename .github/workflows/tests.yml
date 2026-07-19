@@ -21,17 +21,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements-test.txt
+          cache-dependency-path: requirements-test.lock
 
       - name: Install test dependencies
-        run: python -m pip install -r requirements-test.txt
+        run: python -m pip install --require-hashes -r requirements-test.lock
 
       - name: Compile Python sources
         run: python -m compileall -q main.py localwhisper scripts tests
@@ -44,4 +44,37 @@ jobs:
 
       - name: Audit locked CPU dependencies
         if: matrix.python-version == '3.13'
-        run: python -m pip_audit -r requirements-cpu.lock --no-deps --progress-spinner off
+        run: python -m pip_audit -r requirements-cpu.lock --no-deps --disable-pip --progress-spinner off
+
+  package-smoke:
+    name: Build clean Windows Core
+    needs: test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-build.lock
+
+      - name: Build Core from hashed dependencies
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Verify package boundaries
+        shell: pwsh
+        run: |
+          $exe = Get-Item dist\QuantumScribe\QuantumScribe.exe -ErrorAction Stop
+          if ($exe.Length -lt 1MB) { throw "Executável incompleto." }
+          $forbidden = Get-ChildItem dist\QuantumScribe -Recurse | Where-Object {
+            $_.FullName -match '\\(torch|torchaudio|silero_vad|nvidia|matplotlib)(\\|$)'
+          }
+          if ($forbidden) {
+            $forbidden.FullName | Write-Error
+            throw "O Core contém um runtime opcional proibido."
+          }

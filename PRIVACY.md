@@ -7,7 +7,9 @@ de reconhecimento de voz na nuvem.
 ## Conexões de rede
 
 O aplicativo pode acessar o Hugging Face quando o usuário solicita o download de um
-modelo Whisper ou Mini-LLM. O código não incorpora telemetria própria.
+modelo Whisper ou Mini-LLM. Componentes opcionais CUDA e Silero são baixados da
+GitHub Release oficial da mesma versão, somente após confirmação e validação SHA-256.
+O código não incorpora telemetria própria.
 
 ## Dados armazenados no computador
 
@@ -20,9 +22,6 @@ Por padrão, dados ficam sob `%LOCALAPPDATA%\QuantumScribe`, incluindo:
 - caches de vocabulário e comparação;
 - `app.log`: diagnóstico local;
 - `emergency_audio.wav`: cópia temporária de recuperação durante o processamento.
-
-Backups completos podem incluir configurações, logs, diário e notas. Guarde-os como
-dados pessoais e não os anexe a issues públicas.
 
 ## Controle do usuário
 

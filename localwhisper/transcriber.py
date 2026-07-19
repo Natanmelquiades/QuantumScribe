@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     import numpy as np
     from faster_whisper import WhisperModel
 
-from .config import AppConfig, is_model_downloaded, model_dir
+from .config import AppConfig, is_model_downloaded, model_snapshot_path
 from .hardware import resolve_hardware
 
 # ---------------------------------------------------------------------------
@@ -83,12 +83,13 @@ class LocalTranscriber:
                 getattr(self.config, "effective_model", "") or self.config.model
             )
             if not is_model_downloaded(model_name):
-                self.on_status(f"Baixando modelo {model_name} — aguarde...")
-                from .model_manager import ensure_model_downloaded
-
-                ensure_model_downloaded(model_name)
+                raise RuntimeError(
+                    f"O modelo {model_name} ainda não está instalado. "
+                    "Abra Configurações > Ditado & IA e confirme o download."
+                )
 
             from faster_whisper import WhisperModel
+            model_path = str(model_snapshot_path(model_name))
 
             selection = resolve_hardware(self.config.device, self.config.compute_type)
             device = selection.device
@@ -102,10 +103,9 @@ class LocalTranscriber:
             # Inicializa o modelo usando o diretório local configurado
             try:
                 self._model = WhisperModel(
-                    model_name,
+                    model_path,
                     device=device,
                     compute_type=compute_type,
-                    download_root=str(model_dir()),
                 )
                 self._current_device = device
                 self._current_compute_type = compute_type
@@ -117,10 +117,9 @@ class LocalTranscriber:
                     cpu_selection = resolve_hardware("cpu", self.config.compute_type)
                     compute_type = cpu_selection.compute_type
                     self._model = WhisperModel(
-                        model_name,
+                        model_path,
                         device=device,
                         compute_type=compute_type,
-                        download_root=str(model_dir()),
                     )
                     self._current_device = device
                     self._current_compute_type = compute_type
@@ -317,10 +316,13 @@ class LocalTranscriber:
                     cpu_selection = resolve_hardware("cpu", self.config.compute_type)
                     compute_type = cpu_selection.compute_type
                     self._model = WhisperModel(
-                        getattr(self.config, "effective_model", self.config.model) or self.config.model,
+                        str(
+                            model_snapshot_path(
+                                getattr(self.config, "effective_model", self.config.model) or self.config.model
+                            )
+                        ),
                         device=device,
                         compute_type=compute_type,
-                        download_root=str(model_dir()),
                     )
                     self._current_device = device
                     self._current_compute_type = compute_type

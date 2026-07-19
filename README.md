@@ -26,7 +26,7 @@ trocar palavras.
 > faster-whisper. It offers global shortcuts, literal transcription, conservative
 > punctuation, auto-paste, optional CUDA acceleration and an offline second brain.
 
-![Ajustes de aparência do QuantumScribe](docs/assets/screenshots/01-aparencia.png)
+![Aparência do QuantumScribe em violeta](docs/assets/screenshots/01-aparencia.png)
 
 ## Destaques
 
@@ -37,34 +37,35 @@ trocar palavras.
 - **Atalhos globais:** dite em navegadores, editores, chats e ferramentas de trabalho.
 - **Auto-paste e autoenvio:** cola no cursor e, opcionalmente, pressiona Enter.
 - **Tradução sob demanda:** produz texto em inglês usando o próprio Whisper.
-- **CPU ou NVIDIA CUDA:** detecta automaticamente a GPU e usa CPU quando CUDA não estiver disponível.
+- **CPU ou NVIDIA CUDA:** prioriza automaticamente a GPU e usa CPU quando ela não estiver disponível.
+- **Core leve:** CUDA, modelos de voz e Mini-LLM são instalados somente sob demanda e após confirmação.
 - **Quantum Brain:** transforma ditados em notas Markdown locais e sínteses offline.
-- **Configuração visual:** modelos, áudio, atalhos, HUD, backups e histórico em um só painel.
+- **Configuração visual:** modelos, áudio, atalhos, HUD e histórico em um só painel.
 
 ## Interface
 
 <table>
   <tr>
-    <td><img src="docs/assets/screenshots/01-aparencia.png" alt="Aparência, tema e cor de destaque"></td>
-    <td><img src="docs/assets/screenshots/02-ditado.png" alt="Configurações de ditado, modelo e pontuação"></td>
+    <td><img src="docs/assets/screenshots/01-aparencia.png" alt="Aparência violeta e átomo centralizado"></td>
+    <td><img src="docs/assets/screenshots/02-ditado.png" alt="Configurações de ditado e modelo Whisper"></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/screenshots/03-inteligencia-artificial.png" alt="Configurações de inteligência artificial e tons"></td>
-    <td><img src="docs/assets/screenshots/04-microfone-audio.png" alt="Configurações de microfone, áudio e streaming"></td>
+    <td><img src="docs/assets/screenshots/03-inteligencia-artificial.png" alt="Configurações de inteligência artificial"></td>
+    <td><img src="docs/assets/screenshots/04-microfone-audio.png" alt="Configurações de microfone e áudio"></td>
   </tr>
   <tr>
     <td><img src="docs/assets/screenshots/05-atalhos.png" alt="Atalhos globais do QuantumScribe"></td>
     <td><img src="docs/assets/screenshots/06-quantum-brain.png" alt="Configurações do Quantum Brain"></td>
   </tr>
   <tr>
-    <td><img src="docs/assets/screenshots/07-armazenamento.png" alt="Histórico de transcrições e backups"></td>
+    <td><img src="docs/assets/screenshots/07-armazenamento.png" alt="Histórico local de transcrições"></td>
     <td><img src="docs/assets/screenshots/08-sobre.png" alt="Informações da versão e ambiente do QuantumScribe"></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/assets/screenshots/09-hud-gravando.png" width="31%" alt="HUD do QuantumScribe gravando">
-  <img src="docs/assets/screenshots/10-hud-processando.png" width="31%" alt="HUD do QuantumScribe processando">
+  <img src="docs/assets/screenshots/09-hud-gravando.png" width="31%" alt="HUD com átomo violeta gravando">
+  <img src="docs/assets/screenshots/10-hud-processando.png" width="31%" alt="HUD com átomo violeta processando">
   <img src="docs/assets/screenshots/11-menu-bandeja.png" width="31%" alt="Menu do QuantumScribe na bandeja do Windows">
 </p>
 
@@ -95,7 +96,7 @@ VRAM e tempo de inicialização no primeiro ditado.
 | Forma | Para quem | O que baixar |
 |---|---|---|
 | **Instalador Windows** — recomendada | quem quer instalar e abrir como um programa normal | `QuantumScribe-Setup-<versão>-Windows-x64.exe` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
-| **Versão portátil** | desenvolvedores e testes sem instalação | `QuantumScribe-Windows-x64.zip` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
+| **Versão portátil** | desenvolvedores e testes sem instalação | `QuantumScribe-Core-<versão>-Windows-x64.zip` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
 | **Código-fonte — CPU** | desenvolvimento e contribuição | clone com Git ou [baixe o código em ZIP](https://github.com/Natanmelquiades/QuantumScribe/archive/refs/heads/main.zip) |
 | **Código-fonte — NVIDIA CUDA** | desenvolvimento com GPU NVIDIA compatível | o mesmo código-fonte, iniciado com o perfil CUDA |
 
@@ -117,8 +118,9 @@ VRAM e tempo de inicialização no primeiro ditado.
 O instalador:
 
 - instala somente para o usuário atual, sem exigir acesso de administrador;
-- inclui aceleração NVIDIA CUDA, mas continua funcionando automaticamente em máquinas somente CPU;
-- baixa automaticamente o modelo Pro (`medium`, cerca de 1,5 GB) na primeira execução e retoma o download se a conexão cair;
+- instala apenas o Core CPU, sem CUDA, modelos ou Mini-LLM embutidos;
+- detecta automaticamente a GPU e oferece o componente CUDA somente em máquinas NVIDIA compatíveis;
+- mostra exatamente o que falta e só baixa após confirmação; downloads interrompidos podem ser retomados;
 - adiciona o QuantumScribe ao menu Iniciar;
 - oferece um atalho opcional na área de trabalho;
 - aparece normalmente em **Configurações > Aplicativos instalados** para desinstalação.
@@ -135,7 +137,7 @@ demanda e armazenados em `%LOCALAPPDATA%\QuantumScribe`.
 ### Opção 2 — versão portátil
 
 1. Abra a [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest).
-2. Em **Assets**, baixe `QuantumScribe-Windows-x64.zip`.
+2. Em **Assets**, baixe `QuantumScribe-Core-<versão>-Windows-x64.zip`.
 3. Clique com o botão direito no ZIP e selecione **Extrair tudo**.
 4. Abra a pasta extraída e execute `QuantumScribe.exe`.
 
@@ -224,7 +226,7 @@ O QuantumScribe mantém configurações, modelos, diário, notas, caches e logs 
 %LOCALAPPDATA%\QuantumScribe
 ```
 
-Transcrições e backups podem conter informações pessoais. Não publique esses
+Transcrições e notas podem conter informações pessoais. Não publique esses
 arquivos em issues. Leia [PRIVACY.md](PRIVACY.md) para conhecer todos os dados locais
 e as conexões de rede.
 
@@ -239,8 +241,8 @@ Opções importantes:
 - `literal_mode`: preserva as palavras sem pós-reescrita;
 - `punctuation_assist`: melhora sinais terminais e pausas;
 - `preload_model`: se `false`, carrega o modelo no primeiro ditado;
-- `auto_download_model`: baixa ou retoma automaticamente o modelo escolhido;
-- `device`: `auto` (recomendado), `cpu` ou `cuda`; mesmo com preferência CUDA, o app recua preventivamente para CPU se necessário;
+- `auto_download_model`: mantido por compatibilidade e sempre desativado; downloads exigem confirmação;
+- `device`: `auto` (padrão) prioriza GPU NVIDIA e recua preventivamente para CPU; `cpu` força CPU;
 - `auto_paste`: insere o resultado no campo capturado;
 - `use_llm_rewriter`: habilita reescrita opcional — desligada por padrão.
 
@@ -260,7 +262,7 @@ Os testes não precisam de microfone, GPU ou modelo Whisper baixado.
 ```text
 hotkeys/tray → app.py → audio.py → transcriber.py → punctuation/cleaner
                     ↘ HUD/UI               ↘ clipboard + auto-paste
-                    ↘ diary / Quantum Brain / backups
+                    ↘ diary / Quantum Brain
 ```
 
 Os módulos principais estão documentados no próprio código. Consulte
@@ -269,28 +271,27 @@ Os módulos principais estão documentados no próprio código. Consulte
 ## Build para Windows
 
 ```powershell
-.\build.ps1                    # pasta portátil, perfil CPU
-.\build.ps1 -Cuda              # pasta portátil adaptativa CPU/CUDA
-.\build.ps1 -Cuda -Installer   # instalador universal recomendado para distribuição
-.\build.ps1 -Installer         # instalador menor, somente CPU
+.\build.ps1                    # Core portátil, sem runtimes pesados opcionais
+.\build.ps1 -Installer         # instalador leve do Core
+.\scripts\build_optional_components.ps1  # ZIPs CUDA e Silero sob demanda
 ```
 
-O build usa os lockfiles reproduzíveis dentro de uma `.venv-build` isolada e gera
+O build usa lockfiles com versões e hashes dentro de uma `.venv-build-core` isolada e gera
 `dist\QuantumScribe\`. Distribua a pasta inteira compactada, não somente o `.exe`,
 porque as DLLs e bibliotecas fazem parte do aplicativo. Para gerar o instalador também
 é necessário ter o
 [NSIS](https://nsis.sourceforge.io/) instalado.
 
-Tags `v*` acionam o workflow de release, que testa o código, produz o ZIP portátil e o
-instalador, calcula os hashes SHA-256 e anexa os três arquivos à GitHub Release.
+Tags `v*` acionam o workflow de release, que testa o código, produz o Core, o instalador
+e os componentes opcionais separados, calcula os hashes SHA-256 e publica tudo na mesma release.
 
 ## Solução de problemas
 
 - **A bandeja não aparece:** confira o menu de ícones ocultos do Windows e o
   `%LOCALAPPDATA%\QuantumScribe\app.log`.
 - **Atalho não responde:** verifique se outro programa registrou a mesma combinação.
-- **Primeiro ditado demora:** aguarde o download inicial e a carga do modelo em RAM/VRAM; as próximas transcrições reutilizam o modelo.
-- **CUDA falha:** atualize o driver ou selecione CPU com `compute_type=int8`.
+- **Primeiro uso:** confirme o modelo sugerido na preparação inicial; nada é baixado silenciosamente.
+- **CUDA falha:** atualize o driver; o modo automático recua para CPU sem interromper a transcrição.
 - **Modelo não baixa:** confira conexão, cerca de 2 GB livres e permissões da pasta local; ao reabrir, o download continua de onde parou.
 - **Texto não é colado:** confirme que o campo original ainda existe e que
   `auto_paste` está habilitado.

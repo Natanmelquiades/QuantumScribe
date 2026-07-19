@@ -20,10 +20,10 @@ por cada pacote continuam sendo a fonte oficial.
 | noisereduce | redução de ruído | MIT |
 | SciPy | filtros de áudio | BSD-3-Clause |
 | Silero VAD | detecção de fala | MIT |
-| PyTorch | inferência/VAD | BSD-3-Clause |
+| ONNX Runtime | inferência leve do Silero VAD | MIT |
 | PyYAML | leitura YAML | MIT |
 | NVIDIA cuBLAS/cuDNN | aceleração CUDA opcional | termos proprietários NVIDIA |
 
-Os modelos baixados do Hugging Face não fazem parte deste repositório. Antes de
-redistribuir qualquer peso de modelo, consulte a licença da página específica do
-modelo.
+Os modelos Whisper e Mini-LLM baixados do Hugging Face não fazem parte deste
+repositório. O componente opcional Silero contém somente o modelo ONNX oficial sob
+MIT. Antes de redistribuir outros pesos, consulte a licença da página específica.

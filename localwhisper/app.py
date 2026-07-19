@@ -162,10 +162,9 @@ class QuantumScribeApp:
     def run(self) -> None:
         """Inicia a aplicação executando os loops de escuta e o loop principal do Tkinter."""
         self.tray.start()
-        # Primeira execução: instala o modelo padrão em segundo plano. A bandeja
-        # permanece responsiva e o primeiro ditado aguarda o mesmo download, se preciso.
-        if getattr(self.config, "auto_download_model", True):
-            threading.Thread(target=self._prepare_model_download, daemon=True).start()
+        # A preparação é automática quanto ao hardware, mas nenhum pacote é baixado
+        # antes de o usuário confirmar claramente o plano e o tamanho aproximado.
+        self.root.after(900, self._offer_initial_setup)
         # O CTranslate2 pode reservar vários GB e competir com o loop da bandeja
         # durante a carga. Por padrão o modelo é carregado somente após o primeiro
         # ditado; quem preferir aquecimento antecipado pode habilitar a opção no JSON.
@@ -607,37 +606,122 @@ class QuantumScribeApp:
         if self.config.streaming_mode:
             try:
                 from .stream_transcriber import _create_best_vad
-                _create_best_vad()  # Carrega o modelo torch na memória
+                _create_best_vad()  # Carrega o modelo ONNX na memória
             except Exception:
                 pass
 
-    def _prepare_model_download(self) -> None:
-        """Baixa o modelo escolhido sem ocupar CPU/GPU carregando-o na memória."""
+    def _offer_initial_setup(self) -> None:
+        """Monta automaticamente apenas o plano necessário para esta máquina."""
+        from tkinter import messagebox
+
+        from .components import component_installed, nvidia_gpu_detected
         from .config import is_model_downloaded
-        from .model_manager import ensure_model_downloaded
+        from .hardware import cuda_runtime_status
 
         model_name = getattr(self.config, "effective_model", "") or self.config.model
-        if is_model_downloaded(model_name):
+        needs_model = not is_model_downloaded(model_name)
+        gpu_detected, gpu_detail = nvidia_gpu_detected()
+        cuda_ready, _ = cuda_runtime_status()
+        needs_cuda = gpu_detected and not cuda_ready and not component_installed("cuda")
+        needs_vad = bool(self.config.streaming_mode) and not component_installed("silero_vad")
+        if not (needs_model or needs_cuda or needs_vad):
             return
+
+        items: list[str] = []
+        if needs_model:
+            items.append(f"• Modelo Whisper {model_name} (necessário para transcrever)")
+        if needs_cuda:
+            items.append(f"• Aceleração NVIDIA CUDA ({gpu_detail}; usada automaticamente)")
+        if needs_vad:
+            items.append("• Silero VAD neural (~3 MB; necessário para máxima qualidade no modo contínuo)")
+        suffix = "\n\nA aceleração CUDA exigirá reiniciar somente o Quantum Scribe." if needs_cuda else ""
+        confirmed = messagebox.askyesno(
+            "Preparação sob demanda",
+            "O Quantum Scribe detectou o que falta nesta máquina:\n\n"
+            + "\n".join(items)
+            + "\n\nBaixar e verificar esses itens agora? Nada além desta lista será instalado."
+            + suffix,
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+        threading.Thread(
+            target=self._install_setup_plan,
+            args=(needs_model, needs_cuda, needs_vad, model_name),
+            daemon=True,
+        ).start()
+
+    def _install_setup_plan(self, needs_model: bool, needs_cuda: bool, needs_vad: bool, model_name: str) -> None:
+        """Executa o plano confirmado e mantém a interface responsiva."""
         try:
-            self.tray.icon.title = f"Quantum Scribe — Baixando modelo {model_name}..."
-        except Exception:
-            pass
-        try:
-            ensure_model_downloaded(model_name)
-            try:
-                self.tray.icon.title = "Quantum Scribe — Pronto para ditar"
-            except Exception:
-                pass
+            from .components import install_component
+
+            def status(message: str) -> None:
+                try:
+                    self.tray.icon.title = f"Quantum Scribe — {message}"
+                except Exception:
+                    pass
+
+            if needs_cuda:
+                install_component("cuda", on_status=status)
+            if needs_vad:
+                install_component("silero_vad", on_status=status)
+            if needs_model:
+                status(f"Baixando modelo {model_name}...")
+                from .model_manager import ensure_model_downloaded
+
+                ensure_model_downloaded(model_name)
+            status("Pronto para ditar")
+            self.root.after(0, lambda: self._finish_setup(needs_cuda))
         except Exception as error:
-            import logging
+            self.root.after(0, lambda message=str(error): self._show_setup_error(message))
 
-            logging.getLogger(__name__).warning("[Modelo] Download automático falhou: %s", error)
-            try:
-                self.tray.icon.title = "Quantum Scribe — Download pendente; clique para tentar novamente"
-            except Exception:
-                pass
+    def _finish_setup(self, restart_required: bool) -> None:
+        from tkinter import messagebox
 
+        if restart_required:
+            restart = messagebox.askyesno(
+                "Componente instalado",
+                "A aceleração NVIDIA foi instalada e verificada.\n\n"
+                "Reiniciar o Quantum Scribe agora para ativá-la?",
+                parent=self.root,
+            )
+            if restart:
+                self.restart()
+                return
+        else:
+            messagebox.showinfo("Preparação concluída", "Os itens confirmados estão prontos para uso.", parent=self.root)
+
+    def _show_setup_error(self, message: str) -> None:
+        from tkinter import messagebox
+
+        messagebox.showerror(
+            "Falha na preparação",
+            f"Nenhum componente não verificado foi ativado.\n\nDetalhes: {message}",
+            parent=self.root,
+        )
+
+    def restart(self) -> None:
+        """Reabre o mesmo aplicativo após esta instância liberar seus recursos."""
+        import os
+        import subprocess
+        import sys
+
+        pid = os.getpid()
+        if getattr(sys, "frozen", False):
+            command = [sys.executable, "--restart-after", str(pid)]
+            cwd = str(Path(sys.executable).resolve().parent)
+        else:
+            entrypoint = Path(__file__).resolve().parents[1] / "main.py"
+            command = [sys.executable, str(entrypoint), "--restart-after", str(pid)]
+            cwd = str(entrypoint.parent)
+        subprocess.Popen(
+            command,
+            cwd=cwd,
+            close_fds=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        self.exit()
     # ---- Métodos de Streaming -----------------------------------------------
 
     def _start_streaming(self) -> None:
@@ -779,18 +863,13 @@ class QuantumScribeApp:
             self._register_all_hotkeys()
 
         self.transcriber.reload_config(new_config)
-
-        # Sincroniza o singleton do Quantum Brain com a nova configuração,
-        # para que intervalo, limite de notas e toggles passem a valer sem reiniciar.
         try:
             from .quantum_brain import _orchestrator_instance
             if _orchestrator_instance is not None:
                 _orchestrator_instance.update_config(new_config)
         except Exception:
             pass
-
-        if getattr(new_config, "auto_download_model", True):
-            threading.Thread(target=self._prepare_model_download, daemon=True).start()
+        self.root.after(100, self._offer_initial_setup)
 
     def exit(self) -> None:
         """Desregistra recursos do sistema e encerra o processo de forma limpa."""
@@ -813,64 +892,39 @@ def main() -> None:
     from .config import app_data_dir, migrate_legacy_data
     migrate_legacy_data()
 
+    import os
+    import sys
+
+    if "--restart-after" in sys.argv:
+        try:
+            index = sys.argv.index("--restart-after")
+            previous_pid = int(sys.argv[index + 1])
+        except (ValueError, IndexError):
+            return
+        if sys.platform == "win32" and previous_pid > 0:
+            handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, previous_pid)
+            if handle:
+                ctypes.windll.kernel32.WaitForSingleObject(handle, 15000)
+                ctypes.windll.kernel32.CloseHandle(handle)
+
     if not acquire_single_instance():
-        import os
-        import subprocess
         import sys
-        import time
         import tkinter as tk
         from tkinter import messagebox
 
         root = tk.Tk()
         root.withdraw()
 
-        # Pergunta de forma amigável se deseja reiniciar o app
-        resposta = messagebox.askyesno(
+        messagebox.showinfo(
             "Quantum Scribe já ativo",
             "O Quantum Scribe já está aberto em segundo plano na bandeja do sistema.\n\n"
-            "Deseja fechar a instância anterior e iniciar uma nova?",
+            "Use o ícone da bandeja para abrir as configurações ou encerrar o aplicativo.",
             parent=root
         )
         root.destroy()
-
-        if resposta:
-            current_pid = os.getpid()
-            pid_file = app_data_dir() / "instance.pid"
-
-            other_pid = None
-            if pid_file.exists():
-                try:
-                    other_pid = int(pid_file.read_text().strip())
-                except (ValueError, OSError):
-                    other_pid = None
-
-            if other_pid and other_pid != current_pid:
-                # Encerra APENAS a instância anterior do Quantum Scribe pelo PID exato
-                cmd = (
-                    f'powershell -WindowStyle Hidden -Command '
-                    f'"Stop-Process -Id {other_pid} -ErrorAction SilentlyContinue"'
-                )
-                try:
-                    subprocess.run(
-                        cmd, shell=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-                    )
-                except Exception:
-                    pass
-
-            # Aguarda um pequeno instante para liberação do Mutex
-            time.sleep(0.5)
-
-            # Tenta adquirir o Mutex novamente
-            if acquire_single_instance():
-                pid_file.write_text(str(current_pid))
-                app = QuantumScribeApp()
-                app.run()
-                return
         return
 
     # Salva o PID atual na inicialização bem-sucedida
-    import os
     pid_file = app_data_dir() / "instance.pid"
     pid_file.write_text(str(os.getpid()))
 

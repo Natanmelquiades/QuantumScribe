@@ -19,13 +19,13 @@ APP_NAME = "QuantumScribe"
 @dataclass(slots=True)
 class AppConfig:
     """Dataclass que mapeia todas as opções de configuração do aplicativo."""
-    model: str = "medium"           # Padrão Pro; baixado automaticamente na primeira execução
+    model: str = "medium"           # Padrão Pro; instalado somente após consentimento do usuário
     effective_model: str = ""      # Modelo efetivo da sessão (normalmente igual a model)
     language: str = "pt"           # Idioma da transcrição ('pt' para português ou vazio para auto)
     device: str = "auto"           # Detecta CUDA automaticamente e recua preventivamente para CPU
     compute_type: str = "auto"     # Seleciona uma precisão suportada pelo dispositivo efetivo
     preload_model: bool = False    # Carregar sob demanda para manter inicialização e bandeja responsivas
-    auto_download_model: bool = True  # Baixar/retomar o modelo escolhido automaticamente
+    auto_download_model: bool = False  # Compatibilidade: downloads silenciosos permanecem desativados
     auto_paste: bool = True        # Insere automaticamente o texto no local focado após a transcrição
     hotkey: str = "Ctrl+Space"     # Atalho de teclado global para iniciar/parar gravação
     initial_prompt: str = (
@@ -125,8 +125,8 @@ def load_config() -> AppConfig:
         if raw.get("llm_model_repo") == "michaelfeil/ct2fast-Qwen1.5-0.5B-Chat":
             raw["llm_model_repo"] = "jncraton/Qwen2.5-0.5B-Instruct-ct2-int8"
 
-        # O modelo escolhido continua sendo o modelo efetivo mesmo quando ainda não foi
-        # baixado. O gerenciador de modelos instala ou retoma o download automaticamente.
+        # O modelo escolhido continua sendo o efetivo mesmo quando ainda não foi baixado.
+        # A instalação exige uma ação explícita na preparação inicial ou nas configurações.
         configured_model = raw.get("model", AppConfig.__dataclass_fields__["model"].default)
         raw["effective_model"] = configured_model
 
@@ -171,6 +171,28 @@ def save_config(config: AppConfig) -> None:
 def is_model_downloaded(model_name: str) -> bool:
     """Retorna ``True`` somente quando o snapshot possui os arquivos essenciais."""
     return _has_complete_model_snapshot(model_dir(), model_name)
+
+
+def model_snapshot_path(model_name: str) -> Path:
+    """Retorna um snapshot local completo para impedir resolução de rede no carregamento."""
+    snapshots_dir = model_dir() / f"models--Systran--faster-whisper-{model_name}" / "snapshots"
+    required_files = ("config.json", "model.bin", "tokenizer.json")
+    try:
+        candidates = sorted(
+            (
+                snapshot
+                for snapshot in snapshots_dir.iterdir()
+                if snapshot.is_dir()
+                and all((snapshot / name).is_file() and (snapshot / name).stat().st_size > 0 for name in required_files)
+            ),
+            key=lambda snapshot: snapshot.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        candidates = []
+    if not candidates:
+        raise FileNotFoundError(f"Snapshot completo do modelo {model_name!r} não encontrado")
+    return candidates[0]
 
 
 def _has_complete_model_snapshot(models_path: Path, model_name: str) -> bool:

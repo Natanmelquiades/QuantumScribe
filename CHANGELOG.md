@@ -4,7 +4,7 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
-## [2.1.29] - 2026-07-19
+## [2.2.1] - 2026-07-19
 
 ### Adicionado
 - Redesign completo da tela de Ajustes no estilo Apple: barra lateral com categorias, páginas internas por função e subpáginas com botão "‹ Voltar" (opções dentro de opções).
@@ -18,6 +18,9 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 ### Corrigido
 - O singleton do Quantum Brain agora recebe a configuração atualizada ao salvar, fazendo intervalo de síntese, limite de notas e toggles valerem sem reiniciar o app.
 - Download do Mini-LLM não depende mais do parâmetro removido `local_dir_use_symlinks` do huggingface_hub 1.x.
+
+### Integrado
+- O novo painel visual passa a operar sobre o core leve da versão 2.2.0, com downloads opcionais sob consentimento e sem a antiga função pública de backup.
 
 ## [2.1.26] - 2026-07-17
 

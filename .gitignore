@@ -11,6 +11,8 @@ htmlcov/
 # Virtual environments
 .venv/
 .venv-build/
+.venv-build-core/
+.component-build/
 venv/
 env/
 
@@ -19,6 +21,7 @@ build/
 dist/
 backups/
 temp_test/
+installer/generated_uninstall_files.nsh
 *.zip
 *.log
 *.wav

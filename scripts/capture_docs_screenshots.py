@@ -66,9 +66,10 @@ def capture_settings() -> list[Path]:
         "# 2026-07-18\n\n## 16:05\n\nRegistro de demonstração.\n\n",
         encoding="utf-8",
     )
-    settings_ui.diary_dir = lambda: demo_diary
-    settings_ui.get_project_root = lambda: Path(r"C:\QuantumScribe")
-    settings_ui.list_backups = lambda: []
+    demo_files = [str(path) for path in demo_diary.glob("*.md")]
+    settings_ui.diary_dir = lambda: Path(r"C:\QuantumScribe\Historico")
+    settings_ui.get_project_root = lambda: Path(r"C:\Program Files\QuantumScribe")
+    settings_ui.glob.glob = lambda _pattern: demo_files
 
     root = tk.Tk()
     root.withdraw()

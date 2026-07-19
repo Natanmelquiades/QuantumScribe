@@ -1,0 +1,2 @@
+-r requirements-cpu.txt
+pyinstaller>=6.11,<7.0
