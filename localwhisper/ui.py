@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+import time
 import tkinter as tk
 from collections.abc import Callable
 from ctypes import wintypes
@@ -202,6 +203,9 @@ class Popup:
 
         # Progresso
         self._progress_animating = False
+        self._cancel_hold_started_at: float | None = None
+        self._cancel_hold_duration = 0.5
+        self._visual_generation = 0
 
         # Estado do átomo
         self._atom_angles = [0.0, math.pi * 2 / 3, math.pi * 4 / 3]
@@ -303,6 +307,10 @@ class Popup:
         self._prog_fill_id = self.canvas.create_rectangle(
             0, 0, 1, 1, fill=PROGRESS_FILL, outline="", state="hidden",
         )
+        self._cancel_hold_id = self.canvas.create_arc(
+            0, 0, 1, 1, start=90, extent=0, style="arc", outline="#ff4d5e",
+            width=1, state="hidden",
+        )
 
     # ------------------------------------------------------------------ WinAPI
 
@@ -368,8 +376,21 @@ class Popup:
 
     # ------------------------------------------------------------- APIs Públicas
 
+    @property
+    def visual_generation(self) -> int:
+        """Identidade da sessão visual atual, usada para invalidar callbacks antigos."""
+        return self._visual_generation
+
+    def _new_visual_generation(self) -> int:
+        self._visual_generation += 1
+        return self._visual_generation
+
+    def _schedule_animation(self, delay_ms: int, generation: int) -> None:
+        self.root.after(delay_ms, lambda: self._animate(generation))
+
     def show_recording(self, theme: str = "atom_centered", color: str = "#BF5AF2") -> None:
         """Exibe o HUD no estado de gravação ativa, aplicando o layout do tema."""
+        self._new_visual_generation()
         self._active_theme = theme
         self._atom_color = color
         self.smooth_amp = 0.0
@@ -393,10 +414,11 @@ class Popup:
         self._position()
         self.window.deiconify()
         self.animating = True
-        self._animate()
+        self._animate(self._visual_generation)
 
     def show_processing_with_progress(self, audio_duration: float, title_override: str = "Transcrevendo…") -> None:
         """Exibe o HUD no estado de processamento/transcrição local do Whisper."""
+        self._new_visual_generation()
         self._apply_layout(self._active_theme)
 
         only_atom = (self._active_theme == "atom_centered")
@@ -406,7 +428,7 @@ class Popup:
             self._reset_indicators()
             self._position()
             self.window.deiconify()
-            self._animate()
+            self._animate(self._visual_generation)
             return
 
         if self._active_theme == "atom_minimal":
@@ -429,7 +451,7 @@ class Popup:
             self.canvas.itemconfigure(self._prog_fill_id, state="normal")
             self.canvas.itemconfigure(self._pct_id, text="0%", state="normal")
             self._progress_animating = True
-            self._animate_real_progress()
+            self._animate_real_progress(self._visual_generation)
 
     def complete_progress(self) -> None:
         """Finaliza o preenchimento da barra de progresso."""
@@ -449,6 +471,7 @@ class Popup:
 
     def show_loading_model(self) -> None:
         """Exibe o HUD no estado de carregamento do modelo de IA."""
+        self._new_visual_generation()
         self.animating = False
         self._apply_layout(self._active_theme)
         self._set_content("Carregando modelo…", "Inicializando IA")
@@ -460,10 +483,11 @@ class Popup:
         if only_atom:
             self.hud_state = "transcribing"
             self.animating = True
-            self._animate()
+            self._animate(self._visual_generation)
 
     def show_message(self, title: str, subtitle: str = "", error: bool = False) -> None:
         """Exibe uma mensagem temporária de status ou erro no HUD."""
+        self._new_visual_generation()
         only_atom = (self._active_theme == "atom_centered")
         if only_atom:
             if error:
@@ -475,7 +499,7 @@ class Popup:
                 self._reset_indicators()
                 self._position()
                 self.window.deiconify()
-                self._animate()
+                self._animate(self._visual_generation)
             else:
                 self.trigger_explosion()
             return
@@ -502,22 +526,58 @@ class Popup:
             self.hud_state = "exploding"
             self.animating = True
             self._explosion_frame = 0
+            self._animate(self._visual_generation)
             return
 
         if self._active_theme == "atom_minimal":
             self._is_condensing = False
             self._is_exploding = True
             self._explosion_progress = 0.0
+            self.animating = True
+            self._animate(self._visual_generation)
 
-    def hide(self) -> None:
+    def hide(self, generation: int | None = None) -> None:
+        if generation is not None and generation != self._visual_generation:
+            return
+        self._new_visual_generation()
         self.animating = False
         self._progress_animating = False
         self._is_condensing = False
         self._is_exploding = False
+        self.clear_cancel_hold()
         self.hud_state = "idle"
         self._only_atom_scale = 1.0
         self.window.attributes("-alpha", 0.88)
         self.window.withdraw()
+
+    def start_cancel_hold(self, duration_seconds: float = 0.5) -> None:
+        """Mostra o aro vermelho que confirma o cancelamento por Esc mantido."""
+        if self.hud_state != "recording":
+            return
+        self._cancel_hold_duration = max(0.1, duration_seconds)
+        self._cancel_hold_started_at = time.monotonic()
+        self._render_cancel_hold_progress()
+
+    def clear_cancel_hold(self) -> None:
+        """Remove o aro sem alterar o estado da gravação."""
+        self._cancel_hold_started_at = None
+        self.canvas.itemconfigure(self._cancel_hold_id, extent=0, state="hidden")
+
+    def _render_cancel_hold_progress(self) -> None:
+        if self._cancel_hold_started_at is None:
+            return
+        elapsed = time.monotonic() - self._cancel_hold_started_at
+        ratio = min(1.0, elapsed / self._cancel_hold_duration)
+        lay = self._active_layout
+        radius = max(lay["atom_a"], lay["atom_b"]) + 4
+        cx, cy = lay["atom_cx"], lay["atom_cy"]
+        self.canvas.coords(
+            self._cancel_hold_id,
+            cx - radius, cy - radius, cx + radius, cy + radius,
+        )
+        self.canvas.itemconfigure(
+            self._cancel_hold_id, extent=-360 * ratio, state="normal",
+        )
 
     def _set_content(self, title: str, subtitle: str, title_color: str = TEXT_COLOR) -> None:
         only_atom = (self._active_theme == "atom_centered")
@@ -620,8 +680,8 @@ class Popup:
         self.canvas.itemconfigure(self._prog_fill_id, state="hidden")
         self.canvas.itemconfigure(self._pct_id, state="hidden")
 
-    def _animate_real_progress(self) -> None:
-        if not self._progress_animating:
+    def _animate_real_progress(self, generation: int) -> None:
+        if not self._progress_animating or generation != self._visual_generation:
             return
         import time
         lay = self._active_layout
@@ -630,7 +690,7 @@ class Popup:
         fill_w = int(lay['prog_w'] * ratio)
         self.canvas.coords(self._prog_fill_id, lay['prog_x'], lay['prog_y'], lay['prog_x'] + fill_w, lay['prog_y'] + lay['prog_h'])
         self.canvas.itemconfigure(self._pct_id, text=f"{int(ratio * 100)}%", state="normal")
-        self.root.after(80, self._animate_real_progress)
+        self.root.after(80, lambda: self._animate_real_progress(generation))
 
     # ---------------------------------------------------------------- Internos
 
@@ -688,16 +748,17 @@ class Popup:
 
     # ---------------------------------------------------------------- Animações
 
-    def _animate(self) -> None:
-        if not self.animating:
+    def _animate(self, generation: int) -> None:
+        if not self.animating or generation != self._visual_generation:
             return
+        self._render_cancel_hold_progress()
         if self._active_theme in ("atom", "atom_compact", "atom_centered"):
-            self._animate_atom()
+            self._animate_atom(generation)
         else:
-            self._animate_dots()
+            self._animate_dots(generation)
 
-    def _animate_dots(self) -> None:
-        if not self.animating:
+    def _animate_dots(self, generation: int) -> None:
+        if not self.animating or generation != self._visual_generation:
             return
         lay = self._active_layout
         only_atom = (self._active_theme == "atom_centered")
@@ -716,7 +777,7 @@ class Popup:
                 self._explosion_frame += 1
                 self.window.attributes("-alpha", 0.88 * opacity)
                 if opacity <= 0.0 or self._only_atom_scale >= 2.2:
-                    self.hide()
+                    self.hide(generation)
                     return
             elif self.hud_state == "error":
                 self._only_atom_scale = self._only_atom_scale * 0.90 + 0.4 * 0.10
@@ -728,7 +789,7 @@ class Popup:
                 self._error_timer += 1
                 if self._error_timer > 40:
                     self._error_timer = 0
-                    self.hide()
+                    self.hide(generation)
                     return
             else:
                 self._only_atom_scale = 0.80
@@ -758,7 +819,7 @@ class Popup:
                 else:
                     self.canvas.itemconfigure(did, state="hidden")
 
-            self.root.after(30, self._animate)
+            self._schedule_animation(30, generation)
             return
 
         cy = lay['height'] // 2
@@ -775,10 +836,12 @@ class Popup:
             self.canvas.coords(did, x - lay['dot_r'], y - lay['dot_r'], x + lay['dot_r'], y + lay['dot_r'])
 
         self.phase += 0.35
-        self.root.after(40, self._animate)
+        self._schedule_animation(40, generation)
 
-    def _animate_atom(self) -> None:
-        if not self.animating and not self._is_exploding and self.hud_state != "exploding":
+    def _animate_atom(self, generation: int) -> None:
+        if generation != self._visual_generation or (
+            not self.animating and not self._is_exploding and self.hud_state != "exploding"
+        ):
             return
 
         lay = self._active_layout
@@ -794,7 +857,7 @@ class Popup:
                 self._explosion_frame += 1
                 self.window.attributes("-alpha", 0.88 * opacity)
                 if opacity <= 0.0 or self._only_atom_scale >= 2.2:
-                    self.hide()
+                    self.hide(generation)
                     return
             elif self.hud_state == "error":
                 self._only_atom_scale = self._only_atom_scale * 0.90 + 0.4 * 0.10
@@ -804,7 +867,7 @@ class Popup:
                 self._error_timer += 1
                 if self._error_timer > 40:
                     self._error_timer = 0
-                    self.hide()
+                    self.hide(generation)
                     return
             else:
                 self._only_atom_scale = 0.80
@@ -845,7 +908,7 @@ class Popup:
             if self._is_exploding:
                 self._explosion_progress += 0.15
                 if self._explosion_progress > 1.2:
-                    self.hide()
+                    self.hide(generation)
                     return
 
                 scale = 1.0 + (self._explosion_progress ** 2) * 8.0
@@ -957,4 +1020,4 @@ class Popup:
             )
             self.canvas.itemconfigure(self._atom_electron_ids[i], fill=electron_color)
 
-        self.root.after(25, self._animate)
+        self._schedule_animation(25, generation)

@@ -47,6 +47,23 @@ def test_missing_model_preserves_preference_without_silent_download(temp_appdata
     assert reloaded.auto_download_model is False
 
 
+def test_literal_mode_disables_all_text_transformations(temp_appdata):
+    config = AppConfig(
+        literal_mode=True,
+        punctuation_assist=True,
+        remove_stutters=True,
+        remove_fillers=True,
+        continuous_learning=True,
+        use_llm_rewriter=True,
+    )
+
+    assert config.punctuation_assist is True
+    assert config.remove_stutters is False
+    assert config.remove_fillers is False
+    assert config.continuous_learning is False
+    assert config.use_llm_rewriter is False
+
+
 def test_corrupt_config_is_repaired_with_safe_defaults(temp_appdata):
     config_file = temp_appdata / "QuantumScribe" / "config.json"
     config_file.parent.mkdir(parents=True)

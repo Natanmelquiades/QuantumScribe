@@ -97,10 +97,13 @@ class GlobalHotkey:
         self.ready = threading.Event()
         self.error: str | None = None
 
-    def start(self) -> None:
+    def start(self, readiness_timeout: float = 0.05) -> None:
         self.thread = threading.Thread(target=self._message_loop, daemon=True)
         self.thread.start()
-        self.ready.wait(timeout=3)
+        # O app continua iniciando mesmo se o Windows demorar a registrar um
+        # atalho. Falhas imediatas ainda são exibidas ao usuário; não somamos
+        # vários timeouts de 3 s antes de a bandeja ficar disponível.
+        self.ready.wait(timeout=readiness_timeout)
         if self.error:
             raise RuntimeError(self.error)
 
@@ -154,31 +157,63 @@ class GlobalHotkey:
 
 
 class EscapeHotkey:
-    """Registra Esc como hotkey global temporariamente (durante gravação, disparando no Keyup)."""
+    """Confirma o cancelamento apenas quando Esc permanece pressionado.
 
-    def __init__(self, on_press: Callable[[], None] | None = None, on_release: Callable[[], None] | None = None) -> None:
+    O Windows entrega ``WM_HOTKEY`` no início do pressionamento. A confirmação é
+    feita na própria thread da hotkey para não bloquear a interface, enquanto os
+    callbacks de UI continuam sendo encaminhados para a thread principal pelo
+    aplicativo. ``session_id`` impede que um evento atrasado afete outra gravação.
+    """
+
+    def __init__(
+        self,
+        on_press: Callable[[int | None], None] | None = None,
+        on_hold: Callable[[int | None], None] | None = None,
+        on_release: Callable[[int | None], None] | None = None,
+        hold_seconds: float = 0.5,
+    ) -> None:
         self.on_press = on_press
+        self.on_hold = on_hold
         self.on_release = on_release
+        self.hold_seconds = max(0.1, hold_seconds)
         self._thread: threading.Thread | None = None
         self._thread_id: int | None = None
         self._ready = threading.Event()
+        self._session_id: int | None = None
 
-    def register(self) -> None:
+    def register(self, session_id: int | None = None) -> None:
         if self._thread and self._thread.is_alive():
             return
+        self._session_id = session_id
         self._ready.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
         self._ready.wait(timeout=1)
 
-    def unregister(self) -> None:
+    def unregister(self, wait: bool = True) -> None:
+        """Solicita a remoção do atalho, opcionalmente sem bloquear a UI."""
         tid = self._thread_id
         if tid:
             ctypes.windll.user32.PostThreadMessageW(tid, WM_QUIT, 0, 0)
-        if self._thread:
+        if wait and self._thread:
             self._thread.join(timeout=1)
-        self._thread = None
-        self._thread_id = None
+        if not self._thread or not self._thread.is_alive():
+            self._thread = None
+            self._thread_id = None
+        self._session_id = None
+
+    def _wait_for_confirmation(self, user32: ctypes.WinDLL, session_id: int | None) -> None:
+        """Aguarda a tecla liberar e confirma uma única vez ao atingir o limite."""
+        started_at = time.monotonic()
+        confirmed = False
+        while user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000:
+            if not confirmed and time.monotonic() - started_at >= self.hold_seconds:
+                confirmed = True
+                if self.on_hold:
+                    self.on_hold(session_id)
+            time.sleep(0.01)
+        if self.on_release:
+            self.on_release(session_id)
 
     def _loop(self) -> None:
         user32 = ctypes.windll.user32
@@ -194,12 +229,10 @@ class EscapeHotkey:
         try:
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 if msg.message == WM_HOTKEY and msg.wParam == ESCAPE_HOTKEY_ID:
+                    session_id = self._session_id
                     if self.on_press:
-                        self.on_press()
-                    # Aguarda liberar a tecla Esc física antes de disparar
-                    _wait_for_keys_release(0, VK_ESCAPE)
-                    if self.on_release:
-                        self.on_release()
+                        self.on_press(session_id)
+                    self._wait_for_confirmation(user32, session_id)
         finally:
             user32.UnregisterHotKey(None, ESCAPE_HOTKEY_ID)
             self._thread_id = None

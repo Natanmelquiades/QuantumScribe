@@ -68,6 +68,16 @@ mesmo sem prioridade ou especificação completa. Durante o refinamento, cada it
 | QS-012 | Pesquisa semântica local e adaptativa no histórico | Feature | Em refinamento | P2 — Média | G | A criar |
 | QS-013 | Modo cloud/API opcional para computadores fracos | Pesquisa | Em refinamento | P2 — Média | G | A criar |
 | QS-014 | Controle de destino e mudança de foco ao entregar transcrições | Melhoria | Em refinamento | P2 — Média | M | A criar |
+| QS-015 | Restaurar controles e feedbacks sonoros do ditado | Bug | Em refinamento | P1 — Alta | M | A criar |
+| QS-016 | Cancelamento intencional por ESC mantido com progresso visual no HUD | Melhoria | Em refinamento | P1 — Alta | M | A criar |
+| QS-017 | Estabilizar HUD, cancelamento e prontidão visual na inicialização | Bug | Em refinamento | P1 — Alta | M | [Abrir PRD](PRD_QS017_ESTABILIDADE_HUD_INICIALIZACAO.md) |
+
+## Programa de implementação
+
+O programa aprovado para entregar todos os itens deste backlog está consolidado
+no [PRD — Implementação integral do Product Backlog](PRD_IMPLEMENTACAO_PRODUCT_BACKLOG.md).
+Ele organiza os itens por ondas, dependências, portões de decisão e critérios de
+conclusão, sem substituir os PRDs específicos já existentes.
 
 ## Caixa de Entrada
 
@@ -501,6 +511,127 @@ _Nenhum item aguardando triagem._
 - **Critério principal de aceite:** com o retorno automático desabilitado, o
   usuário pode trocar de aplicativo durante a transcrição e nenhuma janela é
   aberta, restaurada ou trazida para frente contra sua vontade.
+
+### QS-015 — Restaurar controles e feedbacks sonoros do ditado
+
+- **Tipo:** Bug de configuração e feedback de estado.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-003 — Configurações contextuais; QS-009 — Controle de
+  volume dos efeitos.
+- **Problema relatado:** a opção de sons não aparece mais nas configurações e,
+  ao acionar a extensão/atalho de ditado, nenhum efeito é reproduzido: início,
+  conclusão/saída ou cancelamento. O produto fica totalmente mudo e perde um
+  feedback importante sobre o estado da operação.
+- **Constatação preliminar no código:** a configuração `play_sounds`, o volume e
+  as chamadas dos três efeitos ainda existem no código-fonte atual. O defeito
+  precisa ser reproduzido na distribuição utilizada pelo usuário para verificar
+  se é uma regressão de interface, persistência, empacotamento, dispositivo de
+  saída ou reprodução em tempo de execução.
+- **Resultado desejado:** restaurar a configuração visível de efeitos sonoros e
+  garantir feedback audível e coerente ao iniciar, concluir e cancelar um
+  ditado em todas as formas suportadas de acionamento.
+- **Regras preliminares:**
+  - exibir o controle `Efeitos Sonoros` e seu volume na seção correta das
+    configurações, refletindo o valor efetivamente salvo e usado pelo app;
+  - com os sons habilitados e volume acima de zero, reproduzir efeitos distintos
+    de início, conclusão e cancelamento;
+  - aplicar o mesmo comportamento ao acionamento pelo aplicativo, atalho global
+    e extensão, quando essa superfície fizer parte da instalação afetada;
+  - com os sons desabilitados, permanecer silencioso sem alterar o volume salvo;
+  - uma falha de reprodução não pode interromper a gravação ou a transcrição e
+    deve deixar diagnóstico suficiente para suporte;
+  - validar o comportamento também no aplicativo empacotado, não apenas ao
+    executar pelo código-fonte.
+- **Critérios principais de aceite:**
+  - a opção de efeitos sonoros volta a ser encontrada nas configurações e
+    permanece correta após salvar e reiniciar;
+  - com sons habilitados, iniciar, concluir e cancelar um ditado produz os três
+    feedbacks esperados em um dispositivo de saída válido;
+  - o fluxo acionado pela extensão/atalho deixa de permanecer totalmente mudo;
+  - desabilitar os efeitos silencia os três eventos sem afetar a transcrição.
+- **Próxima decisão:** reproduzir na mesma versão e forma de instalação usadas no
+  relato, confirmar qual superfície foi chamada de “extensão” e identificar em
+  qual camada o controle e a reprodução deixaram de funcionar.
+
+### QS-016 — Cancelamento intencional por ESC mantido com progresso visual no HUD
+
+- **Tipo:** Melhoria de segurança da interação e feedback de estado.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-004 — Ícone central do HUD; QS-015 — Feedback sonoro do
+  ditado.
+- **Problema:** durante um ditado, um toque acidental em `Esc` descarta a
+  gravação atual. O cancelamento é uma ação destrutiva para o conteúdo ainda não
+  transcrito e hoje não exige uma confirmação intencional perceptível.
+- **Constatação atual:** enquanto há gravação, o atalho global de `Esc` dispara
+  o cancelamento quando a tecla é liberada; o HUD não apresenta progresso ou
+  confirmação antes de descartar o áudio.
+- **Resultado desejado:** exigir que a pessoa mantenha `Esc` pressionado por um
+  curto intervalo para cancelar o ditado, deixando claro visualmente que o
+  cancelamento está sendo confirmado. Um toque curto deve ser inofensivo e a
+  gravação deve continuar normalmente.
+- **Regras preliminares:**
+  - iniciar a confirmação somente enquanto uma gravação puder ser cancelada;
+  - ao pressionar `Esc`, desenhar uma linha fina vermelha que preenche o contorno
+    circular do ícone central do HUD ao longo do tempo;
+  - cancelar somente quando o ciclo visual completar após aproximadamente 0,5
+    segundo; o HUD deve desaparecer e liberar um novo ditado no mesmo instante,
+    sem pausa de confirmação após o preenchimento;
+  - ao soltar `Esc` antes da conclusão, interromper e limpar a animação sem
+    cancelar, sem pausar e sem alterar a gravação;
+  - se o HUD for fechado, a gravação terminar por outro comando ou ocorrer uma
+    transição de estado durante a contagem, cancelar com segurança o temporizador
+    e impedir que um evento atrasado descarte uma nova sessão;
+  - manter a indicação legível nos temas e cores personalizadas, reservando o
+    vermelho exclusivamente para a ação de cancelamento iminente;
+  - preservar feedback de cancelamento somente quando o cancelamento realmente
+    se confirmar, respeitando a configuração de efeitos sonoros;
+  - atualizar a ajuda de atalhos para explicar que `Esc` deve ser mantido
+    pressionado para cancelar.
+- **Critérios principais de aceite:**
+  - durante um ditado ativo, pressionar e soltar `Esc` antes de 0,5 segundo não
+    interrompe nem descarta o áudio e o HUD retorna ao estado normal;
+  - manter `Esc` por 0,5 segundo completa uma linha fina vermelha ao redor do
+    ícone central e então cancela o ditado uma única vez, ocultando o HUD e
+    permitindo iniciar outro ditado sem espera adicional;
+  - o contorno e o temporizador desaparecem corretamente ao soltar a tecla, ao
+    concluir o ditado por outro atalho e nas transições rápidas entre sessões;
+  - uma confirmação iniciada na sessão anterior nunca cancela uma nova gravação.
+- **Ajuste registrado:** a referência de confirmação passou de 1 segundo para
+  0,5 segundo. Ao completar, não há mais retenção visual: o HUD se fecha e uma
+  nova gravação fica disponível imediatamente.
+
+### QS-017 — Estabilizar HUD, cancelamento e prontidão visual na inicialização
+
+- **Tipo:** Bug de confiabilidade de interface e inicialização.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-004 — HUD em transições; QS-007 — Ícone oficial;
+  QS-016 — Cancelamento por ESC mantido.
+- **Problema relatado:** o ícone/HUD pode demorar para aparecer, aparecer de
+  modo intermitente ou sumir durante o uso. Ao manter `Esc`, o contorno vermelho
+  pode desaparecer antes de completar, deixando incerto se o cancelamento foi
+  realmente confirmado.
+- **Constatações da auditoria:**
+  - cada chamada de exibição do HUD pode iniciar outra cadeia de animação com
+    `after`, sem cancelar nem identificar a cadeia anterior; animações antigas
+    podem avançar a explosão/ocultação da sessão visual atual;
+  - há ocultações temporizadas sem token de sessão no app, portanto um callback
+    de uma mensagem anterior pode esconder o HUD que já foi reutilizado;
+  - a confirmação do `Esc` limpa o aro e fecha o HUD no mesmo callback que atinge
+    o limite, sem garantir ao menos um frame visível de 100%;
+  - os quatro atalhos globais aguardam prontidão durante a construção do app,
+    com timeout de até 3 segundos cada, e a bandeja inicia em thread sem um
+    contrato de prontidão visual; isso explica uma inicialização percebida como
+    lenta ou sem sinal imediato quando o Windows atrasa o registro;
+  - a bandeja ainda cria um ícone de barras independente do asset oficial,
+    mantendo uma segunda superfície visual com ciclo de vida próprio.
+- **Resultado desejado:** uma única máquina de estados visual deve governar HUD,
+  animação, cancelamento e ocultação. O aplicativo deve sinalizar prontidão da
+  bandeja rapidamente, informar falha de atalho de modo visível e nunca ocultar
+  ou cancelar uma sessão posterior por evento antigo.
+- **Plano e especificação:** [PRD QS-017 — Estabilidade do HUD e inicialização](PRD_QS017_ESTABILIDADE_HUD_INICIALIZACAO.md)
 
 ## Pronto para priorização
 

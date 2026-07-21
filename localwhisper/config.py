@@ -81,6 +81,13 @@ class AppConfig:
         """Mantém o modelo efetivo alinhado quando a configuração nasce em memória."""
         if not self.effective_model:
             self.effective_model = self.model
+        # Modo literal é uma promessa de não alterar o texto reconhecido. Também
+        # normalizamos configurações antigas que possam ter combinações inválidas.
+        if self.literal_mode:
+            self.remove_stutters = False
+            self.remove_fillers = False
+            self.continuous_learning = False
+            self.use_llm_rewriter = False
 
 
 def app_data_dir() -> Path:

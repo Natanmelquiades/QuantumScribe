@@ -29,7 +29,7 @@ from typing import Callable
 from PIL import Image, ImageDraw, ImageTk
 
 from .config import AppConfig, is_model_downloaded
-from .diary import diary_dir
+from .diary import diary_dir, search_entries
 from .download_progress import (
     download_snapshot_with_progress,
     download_whisper_with_progress,
@@ -788,6 +788,18 @@ class SettingsWindow(tk.Toplevel):
              toast_kind: str = "success") -> None:
         """Grava o campo na configuração e aplica imediatamente no app."""
         setattr(self._cfg, field, value)
+        if field == "literal_mode" and value:
+            incompatible = (
+                ("remove_stutters", "remove_stutters_var"),
+                ("remove_fillers", "remove_fillers_var"),
+                ("continuous_learning", "learning_var"),
+                ("use_llm_rewriter", "rewriter_var"),
+            )
+            for config_field, variable_name in incompatible:
+                setattr(self._cfg, config_field, False)
+                variable = getattr(self, variable_name, None)
+                if variable is not None:
+                    variable.set(False)
         try:
             self.on_save_callback(self._cfg)
         except Exception:
@@ -1150,23 +1162,35 @@ def _page_dictation(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
     self._row_toggle(card, "Transcrição Literal",
                      "Preserva exatamente o que foi falado, sem correções automáticas.",
                      self.literal_mode_var, "literal_mode",
+                     on_change=lambda _v: self._rebuild_page("dictation"),
                      toast=None)
 
-    self._row_toggle(card, "Pontuação Inteligente",
-                     "Insere pontos e interrogações pelas pausas naturais da fala.",
-                     self.punctuation_assist_var, "punctuation_assist")
+    if self.literal_mode_var.get():
+        self._row_toggle(card, "Assistência de Pontuação",
+                         "Compatível com o modo literal: altera apenas pontuação, nunca palavras.",
+                         self.punctuation_assist_var, "punctuation_assist")
+        self._row_base(
+            card,
+            "Sem alterações de palavras",
+            "Remoção de repetições e hesitações, aprendizado e reescrita por IA "
+            "ficam desativados enquanto a transcrição literal estiver ativa.",
+        )
+    else:
+        self._row_toggle(card, "Pontuação Inteligente",
+                         "Insere pontos e interrogações pelas pausas naturais da fala.",
+                         self.punctuation_assist_var, "punctuation_assist")
 
-    self._row_toggle(card, "Remover Repetições",
-                     "Limpa gagueiras e palavras duplicadas em sequência.",
-                     self.remove_stutters_var, "remove_stutters")
+        self._row_toggle(card, "Remover Repetições",
+                         "Limpa gagueiras e palavras duplicadas em sequência.",
+                         self.remove_stutters_var, "remove_stutters")
 
-    self._row_toggle(card, "Remover Hesitações",
-                     "Remove sons como “hmm”, “ãh” e “eh” do texto final.",
-                     self.remove_fillers_var, "remove_fillers")
+        self._row_toggle(card, "Remover Hesitações",
+                         "Remove sons como “hmm”, “ãh” e “eh” do texto final.",
+                         self.remove_fillers_var, "remove_fillers")
 
-    self._row_nav(card, "Hesitações Personalizadas",
-                  "Palavras extras a remover, separadas por vírgula.",
-                  "Editar", "sub_fillers")
+        self._row_nav(card, "Hesitações Personalizadas",
+                      "Palavras extras a remover, separadas por vírgula.",
+                      "Editar", "sub_fillers")
 
     # --- Saída ---
     card = self._card(body, "Saída do Texto")
@@ -1798,16 +1822,21 @@ def _page_audio(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
                   "Dispositivo usado para capturar a sua voz.",
                   lambda: self._cfg.audio_device or "Padrão do Sistema", "sub_mic")
 
-    self._row_toggle(card, "Aprimorar Áudio",
-                     "Filtro de graves, redução de ruído e normalização de volume "
-                     "antes da transcrição (modo streaming).",
-                     self.audio_enhance_var, "audio_enhance")
+    if self.streaming_var.get():
+        self._row_toggle(card, "Aprimorar Áudio",
+                         "Filtro de graves, redução de ruído e normalização de volume "
+                         "antes da transcrição contínua.",
+                         self.audio_enhance_var, "audio_enhance")
 
-    self._row_nav(card, "Perfil de Aprimoramento",
-                  "Intensidade do processamento de áudio.",
-                  lambda: dict((k, n) for k, n, _d in ENHANCE_PROFILES).get(
-                      self._cfg.audio_enhance_profile, "Equilibrado"),
-                  "sub_profile")
+        self._row_nav(card, "Perfil de Aprimoramento",
+                      "Intensidade do processamento de áudio.",
+                      lambda: dict((k, n) for k, n, _d in ENHANCE_PROFILES).get(
+                          self._cfg.audio_enhance_profile, "Equilibrado"),
+                      "sub_profile")
+    else:
+        self._row_base(card, "Aprimoramento de Áudio",
+                       "Inativo — requer Modo Streaming Contínuo. O modo clássico "
+                       "mantém seu próprio filtro de fala do faster-whisper.")
 
     # Status dos filtros
     nr_ok = (importlib.util.find_spec("noisereduce") is not None
@@ -1823,22 +1852,32 @@ def _page_audio(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
 
     self._row_toggle(card, "Modo Streaming Contínuo",
                      "Transcreve em blocos enquanto você fala, mostrando o texto em tempo real.",
-                     self.streaming_var, "streaming_mode")
+                     self.streaming_var, "streaming_mode",
+                     on_change=lambda _v: self._rebuild_page("audio"))
 
-    self._row_nav(card, "Silêncio para Corte",
-                  "Pausa necessária para separar os blocos de fala.",
-                  lambda: f"{self._cfg.stream_min_silence_ms} ms", "sub_silence")
+    if self.streaming_var.get():
+        self._row_nav(card, "Silêncio para Corte",
+                      "Pausa necessária para separar os blocos de fala.",
+                      lambda: f"{self._cfg.stream_min_silence_ms} ms", "sub_silence")
 
-    from .stream_transcriber import is_silero_available
+        from .stream_transcriber import is_silero_available
 
-    silero_ok = is_silero_available()
-    vad_text = ("✓ Silero VAD neural (alta qualidade)" if silero_ok else
-                "⚠ Silero será instalado ao ativar o modo contínuo")
-    vad_color = t.success if silero_ok else t.warning
-    row = self._row_base(card, "Detecção de Fala (VAD)",
-                         "Motor que identifica quando você está falando.")
-    tk.Label(row, text=vad_text, font=(self.font_name, 8, "bold"),
-             fg=vad_color, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+        silero_ok = is_silero_available()
+        vad_text = ("✓ Silero VAD neural (alta qualidade)" if silero_ok else
+                    "⚠ Silero será instalado ao ativar o modo contínuo")
+        vad_color = t.success if silero_ok else t.warning
+        row = self._row_base(card, "Detecção de Fala (VAD)",
+                             "Motor usado pelo streaming para identificar fala.")
+        tk.Label(row, text=vad_text, font=(self.font_name, 8, "bold"),
+                 fg=vad_color, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+    else:
+        self._row_base(card, "Silêncio para Corte e Silero VAD",
+                       "Inativos — requerem Modo Streaming Contínuo e não são "
+                       "carregados enquanto ele estiver desligado.")
+
+    self._row_base(card, "Filtro de fala do modo clássico",
+                   "Ativo somente no ditado clássico pelo faster-whisper; é um "
+                   "mecanismo separado do Silero VAD do streaming.")
 
     card = self._card(body, "Efeitos Sonoros")
 
@@ -2314,6 +2353,22 @@ def _page_storage(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
     # --- Histórico de transcrições ---
     card = self._card(body, "Histórico de Transcrições")
 
+    search_row = tk.Frame(card, bg=t.card_bg)
+    search_row.pack(fill="x", padx=16, pady=(14, 0))
+    search_row.columnconfigure(0, weight=1)
+    self._history_search_var = tk.StringVar()
+    search_box = tk.Entry(
+        search_row, textvariable=self._history_search_var, bg=t.input_bg,
+        fg=t.text, insertbackground=t.text, relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=t.border,
+        highlightcolor=t.accent, font=(self.font_name, 9),
+    )
+    search_box.grid(row=0, column=0, sticky="ew", ipady=6)
+    search_box.bind("<Return>", lambda _event: self._run_history_search())
+    self._button(search_row, "Buscar", self._run_history_search, "secondary").grid(
+        row=0, column=1, padx=(8, 0), sticky="e"
+    )
+
     log_view = tk.Frame(card, bg=t.input_bg, highlightthickness=1,
                         highlightbackground=t.border)
     log_view.pack(fill="x", padx=16, pady=(14, 6))
@@ -2348,7 +2403,7 @@ def _page_storage(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
 SettingsWindow._page_storage = _page_storage
 
 
-def _refresh_transcriptions_list(self: SettingsWindow) -> None:
+def _refresh_transcriptions_list(self: SettingsWindow, query: str = "") -> None:
     if not hasattr(self, "logs_text") or self.logs_text is None:
         return
     try:
@@ -2359,6 +2414,22 @@ def _refresh_transcriptions_list(self: SettingsWindow) -> None:
     self.logs_text.configure(state="normal")
     self.logs_text.delete("1.0", "end")
     self._listed_files = []
+
+    query = query.strip()
+    if query:
+        results = search_entries(query)
+        if not results:
+            self.logs_text.insert("end", f"Nenhuma transcrição encontrada para “{query}”.\n")
+        else:
+            for result in results:
+                self._listed_files.append(str(result.path))
+                self.logs_text.insert(
+                    "end",
+                    f"🔎 {result.date:%d/%m/%Y} {result.time}  {result.preview}\n",
+                    "link",
+                )
+        self.logs_text.configure(state="disabled")
+        return
 
     files = glob.glob(os.path.join(diary_dir(), "*.md"))
     files.sort(reverse=True)
@@ -2380,6 +2451,14 @@ def _refresh_transcriptions_list(self: SettingsWindow) -> None:
 
 
 SettingsWindow._refresh_transcriptions_list = _refresh_transcriptions_list
+
+
+def _run_history_search(self: SettingsWindow) -> None:
+    query = getattr(self, "_history_search_var", tk.StringVar()).get()
+    self._refresh_transcriptions_list(query)
+
+
+SettingsWindow._run_history_search = _run_history_search
 
 
 def _on_transcription_clicked(self: SettingsWindow, event) -> None:

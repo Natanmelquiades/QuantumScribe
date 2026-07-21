@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Callable
 
 import pystray
@@ -8,6 +9,14 @@ from PIL import Image, ImageDraw
 
 
 def create_icon() -> Image.Image:
+    """Carrega o asset oficial; o desenho legado é somente um fallback seguro."""
+    icon_path = Path(__file__).with_name("assets") / "icon.png"
+    try:
+        with Image.open(icon_path) as official:
+            return official.convert("RGBA").copy()
+    except (OSError, ValueError):
+        pass
+
     # Fundo em preto profundo (10, 11, 13) e barras em laranja neon (255, 96, 0)
     image = Image.new("RGBA", (64, 64), (10, 11, 13, 255))
     draw = ImageDraw.Draw(image)
@@ -42,9 +51,18 @@ class TrayIcon:
             ),
         )
         self.thread: threading.Thread | None = None
+        self.ready = threading.Event()
 
     def start(self) -> None:
-        self.thread = threading.Thread(target=self.icon.run, daemon=True)
+        self.ready.clear()
+
+        def run_icon() -> None:
+            # Marca que o backend da bandeja recebeu o trabalho sem bloquear o
+            # loop Tk; o título inicial já comunica que o app está disponível.
+            self.ready.set()
+            self.icon.run()
+
+        self.thread = threading.Thread(target=run_icon, daemon=True)
         self.thread.start()
 
     def stop(self) -> None:

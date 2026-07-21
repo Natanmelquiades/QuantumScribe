@@ -38,6 +38,8 @@ from .windows import (
     type_into_window,
 )
 
+ESC_HOLD_SECONDS = 0.5
+
 
 class QuantumScribeApp:
     """Classe principal que inicializa os subsistemas e coordena os fluxos de trabalho."""
@@ -73,6 +75,8 @@ class QuantumScribeApp:
         self.processing = False
         self.starting = False
         self._transcription_thread: threading.Thread | None = None
+        self._recording_session = 0
+        self._cancel_confirmation_pending_session: int | None = None
 
         # Estado ativo do ditado atual (atualizado no início da gravação)
         self._active_translate = False
@@ -86,7 +90,12 @@ class QuantumScribeApp:
         self._stream_auto_send = False
 
         # Registra atalhos de controle
-        self.esc_hotkey = EscapeHotkey(self.cancel_from_thread)
+        self.esc_hotkey = EscapeHotkey(
+            on_press=self.begin_cancel_hold_from_thread,
+            on_hold=self.confirm_cancel_hold_from_thread,
+            on_release=self.end_cancel_hold_from_thread,
+            hold_seconds=ESC_HOLD_SECONDS,
+        )
         self.settings_window: SettingsWindow | None = None
 
         # Registra as 4 hotkeys globais editáveis
@@ -142,7 +151,7 @@ class QuantumScribeApp:
                     hk.start()
             except RuntimeError as error:
                 self.popup.show_message("Atalho indisponível", f"{name}: {error}", error=True)
-                self.root.after(4000, self.popup.hide)
+                self._schedule_popup_hide(4000)
 
     def _unregister_all_hotkeys(self) -> None:
         """Encerra a escuta de todas as hotkeys registradas."""
@@ -201,9 +210,43 @@ class QuantumScribeApp:
         if self.recorder.is_recording:
             self.toggle_recording(self._active_translate, self._active_auto_send)
 
-    def cancel_from_thread(self, *_args: object) -> None:
-        """Cancela a gravação em andamento de forma segura na thread principal."""
-        self.root.after(0, self.cancel_recording)
+    def begin_cancel_hold_from_thread(self, session_id: int | None = None) -> None:
+        """Inicia o feedback visual da confirmação de cancelamento na UI."""
+        self.root.after(0, lambda: self._begin_cancel_hold(session_id))
+
+    def confirm_cancel_hold_from_thread(self, session_id: int | None = None) -> None:
+        """Confirma o cancelamento após Esc permanecer pressionado pelo tempo mínimo."""
+        self.root.after(0, lambda: self._confirm_cancel_hold(session_id))
+
+    def end_cancel_hold_from_thread(self, session_id: int | None = None) -> None:
+        """Limpa o feedback quando Esc é liberado antes da confirmação."""
+        self.root.after(0, lambda: self._end_cancel_hold(session_id))
+
+    def _begin_cancel_hold(self, session_id: int | None) -> None:
+        if session_id != self._recording_session or not self.recorder.is_recording:
+            return
+        self.popup.start_cancel_hold(ESC_HOLD_SECONDS)
+
+    def _confirm_cancel_hold(self, session_id: int | None) -> None:
+        if session_id != self._recording_session or not self.recorder.is_recording:
+            return
+        if session_id == self._cancel_confirmation_pending_session:
+            return
+        self._cancel_confirmation_pending_session = session_id
+        # O preenchimento atingiu o limite: encerra o HUD e libera uma nova
+        # gravação no mesmo callback, sem uma pausa visual adicional.
+        self.cancel_recording()
+
+    def _end_cancel_hold(self, session_id: int | None) -> None:
+        if session_id == self._cancel_confirmation_pending_session:
+            return
+        if session_id == self._recording_session:
+            self.popup.clear_cancel_hold()
+
+    def _schedule_popup_hide(self, delay_ms: int) -> None:
+        """Oculta somente a sessão visual que originou a mensagem temporária."""
+        generation = self.popup.visual_generation
+        self.root.after(delay_ms, lambda: self.popup.hide(generation))
 
     def open_config_from_thread(self, *_args: object) -> None:
         """Abre o arquivo de configurações do usuário."""
@@ -293,11 +336,12 @@ class QuantumScribeApp:
             )
         except Exception as error:
             self.popup.show_message("Microfone indisponível", str(error), error=True)
-            self.root.after(5000, self.popup.hide)
+            self._schedule_popup_hide(5000)
             return
 
         # Registra a tecla Esc para cancelamento rápido enquanto grava
-        self.esc_hotkey.register()
+        self._recording_session += 1
+        self.esc_hotkey.register(self._recording_session)
         self.popup.show_recording(theme=self.config.hud_theme, color=self.config.atom_color)
 
         # Define o subtítulo com base no tom e modo ativos
@@ -315,6 +359,9 @@ class QuantumScribeApp:
     def finish_recording(self, translate: bool = False, auto_send: bool = False) -> None:
         """Finaliza a captação de áudio e inicia o pipeline assíncrono de transcrição."""
         self.processing = True
+        self._recording_session += 1
+        self._cancel_confirmation_pending_session = None
+        self.popup.clear_cancel_hold()
         self.esc_hotkey.unregister()
 
         audio_path = Path(tempfile.gettempdir()) / "localwhisper-recording.wav"
@@ -324,14 +371,14 @@ class QuantumScribeApp:
         except Exception as error:
             self.processing = False
             self.popup.show_message("Falha na gravação", str(error), error=True)
-            self.root.after(5000, self.popup.hide)
+            self._schedule_popup_hide(5000)
             return
 
         # Verifica se o tempo de áudio é suficiente
         if duration < 0.25:
             self.processing = False
             self.popup.show_message("Gravação muito curta", "Tente falar por mais tempo.")
-            self.root.after(2200, self.popup.hide)
+            self._schedule_popup_hide(2200)
             return
 
         # Salva cópia de segurança do WAV para emergência em %LOCALAPPDATA%\LocalWhisper\emergency_audio.wav
@@ -354,20 +401,25 @@ class QuantumScribeApp:
 
     def cancel_recording(self) -> None:
         """Interrompe a gravação e descarta qualquer som capturado."""
+        self._recording_session += 1
+        self._cancel_confirmation_pending_session = None
+        self.processing = False
+        self.starting = False
+        # A confirmação visual terminou: não aguarda áudio, som nem a thread da
+        # hotkey para retirar o HUD e aceitar a próxima ação do usuário.
+        self.popup.hide()
+        self.esc_hotkey.unregister(wait=False)
+
         # Cancela streaming se estiver ativo
         if self._stream_session is not None:
             self._stream_session.cancel()
             self._stream_session = None
             self._stream_accumulated = []
 
-        self.esc_hotkey.unregister()
         if self.recorder.is_recording:
             self.recorder.cancel()
             if self.config.play_sounds:
                 play_cancel_sound(self.config.sound_volume)
-        self.processing = False
-        self.starting = False
-        self.popup.hide()
 
     def cancel_transcription(self) -> None:
         """Cancela transcrição em andamento e fecha o HUD imediatamente."""
@@ -376,7 +428,7 @@ class QuantumScribeApp:
             play_cancel_sound(self.config.sound_volume)
         self.processing = False
         self.starting = False
-        self.root.after(0, self.popup.hide)
+        self._schedule_popup_hide(0)
 
     # ---- Pipeline de Entrega ----
 
@@ -567,12 +619,12 @@ class QuantumScribeApp:
         if self.config.play_sounds:
             play_end_sound(self.config.sound_volume)
         self.popup.show_message(message, "Disponível na área de transferência")
-        self.root.after(1600, self.popup.hide)
+        self._schedule_popup_hide(1600)
 
     def _show_error(self, message: str) -> None:
         """Mostra mensagem de falha no popup e agenda o fechamento automático tardio."""
         self.popup.show_message("Não foi possível transcrever", message, error=True)
-        self.root.after(6000, self.popup.hide)
+        self._schedule_popup_hide(6000)
 
     def _threadsafe_status(self, status: str) -> None:
         """Atualiza a mensagem de status no popup de forma assíncrona/thread-safe."""
