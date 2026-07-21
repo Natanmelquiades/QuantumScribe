@@ -9,6 +9,7 @@ injeta o resultado de texto de volta nos aplicativos ativos.
 from __future__ import annotations
 
 import ctypes
+import os
 import tempfile
 import threading
 import tkinter as tk
@@ -892,7 +893,23 @@ class QuantumScribeApp:
             self.settings_window.lift()
             self.settings_window.focus_force()
             return
-        self.settings_window = SettingsWindow(self.root, self.config, self.save_and_apply_config)
+        self.settings_window = SettingsWindow(
+            self.root,
+            self.config,
+            self.save_and_apply_config,
+            self.install_update,
+        )
+
+    def install_update(self, installer: Path, expected_hash: str) -> None:
+        """Agenda o instalador verificado e encerra o app sem perder uma gravação ativa."""
+        if self.recorder.is_recording or self.processing or self.starting:
+            raise RuntimeError("Conclua ou cancele o ditado atual antes de instalar a atualização.")
+        from .updater import schedule_update_after_exit
+
+        schedule_update_after_exit(installer, expected_hash, os.getpid())
+        if self.settings_window is not None and self.settings_window.winfo_exists():
+            self.settings_window.destroy()
+        self.exit()
 
     def save_and_apply_config(self, new_config: AppConfig) -> None:
         """Salva a nova configuração em disco e aplica dinamicamente na execução."""

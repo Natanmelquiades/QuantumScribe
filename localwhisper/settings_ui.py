@@ -354,9 +354,11 @@ class SettingsWindow(tk.Toplevel):
     }
 
     def __init__(self, parent: tk.Tk, current_config: AppConfig,
-                 on_save: Callable[[AppConfig], None]) -> None:
+                 on_save: Callable[[AppConfig], None],
+                 on_install_update: Callable[[Path, str], None] | None = None) -> None:
         super().__init__(parent)
         self.on_save_callback = on_save
+        self.on_install_update_callback = on_install_update
         self._cfg: AppConfig = copy.deepcopy(current_config)
 
         # Estado de tema e tipografia
@@ -379,6 +381,10 @@ class SettingsWindow(tk.Toplevel):
         self._page_parents: dict[str, str] = {}
         self._current_page = ""
         self._toast_after_id: str | None = None
+        self._update_active = False
+        self._update_status_text = "Consulte o GitHub para procurar uma versão mais recente."
+        self._update_status_label: tk.Label | None = None
+        self._update_button: tk.Label | None = None
 
         # Variáveis Tkinter espelhando a configuração (widgets reativos)
         cfg = self._cfg
@@ -2541,6 +2547,34 @@ def _page_about(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
     self._button(row, "Abrir Pasta", lambda: os.startfile(get_project_root()),
                  "secondary").grid(row=0, column=1, sticky="e")
 
+    card = self._card(body, "Atualizações")
+    update_row = self._row_base(
+        card,
+        "Atualização do aplicativo",
+        "Baixa somente o instalador oficial. Modelos, configurações e transcrições são preservados.",
+    )
+    update_controls = tk.Frame(update_row, bg=t.card_bg)
+    update_controls.grid(row=0, column=1, sticky="e")
+    self._update_status_label = tk.Label(
+        update_controls,
+        text=self._update_status_text,
+        font=(self.font_name, 8),
+        fg=t.muted,
+        bg=t.card_bg,
+        wraplength=275,
+        justify="right",
+    )
+    self._update_status_label.pack(anchor="e", pady=(0, 7))
+    self._update_button = self._button(
+        update_controls,
+        "Verificar atualização",
+        self._start_update_check,
+        "primary",
+    )
+    self._update_button.pack(anchor="e")
+    if self._update_active:
+        self._set_update_ui(self._update_status_text, busy=True)
+
     tk.Label(
         body,
         text="Desenvolvido por Natan Melquiades.\n"
@@ -2552,3 +2586,103 @@ def _page_about(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
 
 
 SettingsWindow._page_about = _page_about
+
+
+def _set_update_ui(self: SettingsWindow, message: str, *, busy: bool) -> None:
+    self._update_status_text = message
+    label = self._update_status_label
+    button = self._update_button
+    try:
+        if label is not None and label.winfo_exists():
+            label.configure(text=message)
+        if button is not None and button.winfo_exists():
+            button.configure(
+                text="Aguarde…" if busy else "Verificar atualização",
+                cursor="arrow" if busy else "hand2",
+            )
+    except tk.TclError:
+        pass
+
+
+def _finish_update_error(self: SettingsWindow, error: Exception) -> None:
+    self._update_active = False
+    self._set_update_ui(str(error), busy=False)
+    messagebox.showerror("Não foi possível atualizar", str(error), parent=self)
+
+
+def _start_update_check(self: SettingsWindow) -> None:
+    if self._update_active:
+        return
+    self._update_active = True
+    self._set_update_ui("Verificando a release oficial no GitHub…", busy=True)
+
+    def worker() -> None:
+        try:
+            from .updater import check_for_update
+
+            info = check_for_update()
+        except Exception as error:
+            self.after(0, lambda e=error: self._finish_update_error(e))
+            return
+        self.after(0, lambda: self._handle_update_check(info))
+
+    threading.Thread(target=worker, daemon=True, name="quantumscribe-update-check").start()
+
+
+def _handle_update_check(self: SettingsWindow, info) -> None:
+    if info is None:
+        self._update_active = False
+        self._set_update_ui("Você já está usando a versão mais recente.", busy=False)
+        self._toast("Quantum Scribe está atualizado")
+        return
+
+    size_mb = info.installer.size / (1024 * 1024)
+    confirmed = messagebox.askyesno(
+        "Atualização disponível",
+        f"A versão {info.version} está disponível.\n\n"
+        f"O Quantum Scribe baixará o instalador oficial ({size_mb:.0f} MB), validará a integridade, "
+        "fechará o aplicativo, instalará a atualização e abrirá novamente.\n\n"
+        "Modelos, configurações e transcrições não serão alterados.\n\nAtualizar agora?",
+        parent=self,
+    )
+    if not confirmed:
+        self._update_active = False
+        self._set_update_ui(f"Versão {info.version} disponível. Atualização adiada.", busy=False)
+        return
+    self._set_update_ui(f"Baixando a versão {info.version}…", busy=True)
+
+    def progress(received: int, total: int) -> None:
+        percent = min(100, int(received * 100 / total)) if total else 0
+        try:
+            self.after(0, lambda p=percent: self._set_update_ui(f"Baixando atualização… {p}%", busy=True))
+        except tk.TclError:
+            pass
+
+    def worker() -> None:
+        try:
+            from .updater import download_update
+
+            installer, expected_hash = download_update(info, progress)
+        except Exception as error:
+            self.after(0, lambda e=error: self._finish_update_error(e))
+            return
+        self.after(0, lambda: self._apply_downloaded_update(installer, expected_hash))
+
+    threading.Thread(target=worker, daemon=True, name="quantumscribe-update-download").start()
+
+
+def _apply_downloaded_update(self: SettingsWindow, installer: Path, expected_hash: str) -> None:
+    self._set_update_ui("Instalador verificado. Preparando a atualização…", busy=True)
+    try:
+        if self.on_install_update_callback is None:
+            raise RuntimeError("O aplicativo não disponibilizou o instalador automático.")
+        self.on_install_update_callback(installer, expected_hash)
+    except Exception as error:
+        self._finish_update_error(error)
+
+
+SettingsWindow._set_update_ui = _set_update_ui
+SettingsWindow._finish_update_error = _finish_update_error
+SettingsWindow._start_update_check = _start_update_check
+SettingsWindow._handle_update_check = _handle_update_check
+SettingsWindow._apply_downloaded_update = _apply_downloaded_update

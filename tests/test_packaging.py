@@ -66,6 +66,17 @@ def test_settings_save_does_not_depend_on_lazy_volume_widget():
     assert "sound_volume=float(self.volume_slider.get())" not in settings
 
 
+def test_about_page_exposes_safe_application_updater():
+    settings = (ROOT / "localwhisper" / "settings_ui.py").read_text(encoding="utf-8")
+    updater = (ROOT / "localwhisper" / "updater.py").read_text(encoding="utf-8")
+
+    assert '"Verificar atualização"' in settings
+    assert "SHA256SUMS.txt" in updater
+    assert "draft" in updater and "prerelease" in updater
+    assert "Get-Process" in updater and "Start-Sleep" in updater
+    assert "QuantumScribe-Setup-" in updater
+
+
 def test_nsis_build_uses_utf8_input():
     build_script = (ROOT / "build.ps1").read_text(encoding="utf-8")
 

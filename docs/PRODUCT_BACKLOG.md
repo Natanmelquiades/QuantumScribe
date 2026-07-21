@@ -71,6 +71,7 @@ mesmo sem prioridade ou especificação completa. Durante o refinamento, cada it
 | QS-015 | Restaurar controles e feedbacks sonoros do ditado | Bug | Em refinamento | P1 — Alta | M | A criar |
 | QS-016 | Cancelamento intencional por ESC mantido com progresso visual no HUD | Melhoria | Em refinamento | P1 — Alta | M | A criar |
 | QS-017 | Estabilizar HUD, cancelamento e prontidão visual na inicialização | Bug | Em refinamento | P1 — Alta | M | [Abrir PRD](PRD_QS017_ESTABILIDADE_HUD_INICIALIZACAO.md) |
+| QS-018 | Verificar e atualizar somente o aplicativo | Feature | Em refinamento | P2 — Média | G | [Abrir PRD](PRD_QS018_ATUALIZACAO_APLICATIVO.md) |
 
 ## Programa de implementação
 
@@ -632,6 +633,42 @@ _Nenhum item aguardando triagem._
   bandeja rapidamente, informar falha de atalho de modo visível e nunca ocultar
   ou cancelar uma sessão posterior por evento antigo.
 - **Plano e especificação:** [PRD QS-017 — Estabilidade do HUD e inicialização](PRD_QS017_ESTABILIDADE_HUD_INICIALIZACAO.md)
+
+### QS-018 — Verificar e atualizar somente o aplicativo
+
+- **Tipo:** Feature de distribuição e manutenção.
+- **Prioridade preliminar:** P2 — Média.
+- **Esforço preliminar:** G.
+- **Relacionado a:** processo de releases Windows e componentes opcionais sob
+  demanda.
+- **Problema:** hoje a pessoa precisa abrir a página de releases e baixar
+  manualmente cada nova versão, sem saber dentro do aplicativo se há atualização
+  disponível.
+- **Resultado desejado:** oferecer um botão para consultar a release oficial e,
+  mediante confirmação, instalar somente uma versão mais nova do aplicativo.
+- **Regras preliminares:**
+  - colocar `Verificar atualização` na tela Sobre e avaliar também uma entrada
+    no menu da bandeja;
+  - consultar apenas releases públicas, finais, do repositório oficial;
+  - comparar a versão publicada com a versão instalada e nunca permitir
+    downgrade;
+  - baixar exclusivamente o instalador x64 da versão encontrada e validar seu
+    SHA-256 com o `SHA256SUMS.txt` da mesma release antes de executá-lo;
+  - exigir confirmação antes de baixar ou instalar; a primeira versão não deve
+    procurar nem atualizar silenciosamente;
+  - fechar o aplicativo de forma controlada antes de iniciar o instalador, pois
+    o executável em uso não pode ser substituído;
+  - não atualizar nem apagar modelos, CUDA, Silero VAD, configurações,
+    transcrições, backups ou qualquer outro dado local;
+  - informar falhas de rede, integridade, permissão ou cancelamento com próxima
+    ação clara e sem executar arquivo não verificado.
+- **Critério principal de aceite:** com uma release posterior pública disponível,
+  o usuário consegue confirmar a atualização no app, o instalador verificado é
+  executado após o encerramento e seus dados locais permanecem intactos.
+- **Próxima decisão:** definir se o menu da bandeja também terá o botão e qual
+  mecanismo de iniciador acompanhará o fechamento para executar o instalador com
+  confiabilidade.
+- **Especificação:** [PRD QS-018 — Atualização do aplicativo](PRD_QS018_ATUALIZACAO_APLICATIVO.md)
 
 ## Pronto para priorização
 

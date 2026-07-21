@@ -4,6 +4,20 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+### Adicionado
+- Botão `Verificar atualização` na tela Sobre, com consulta à release pública
+  oficial, comparação de versão, download do instalador, validação SHA-256,
+  instalação silenciosa após o fechamento e reabertura automática do aplicativo.
+
+### Segurança
+- O atualizador aceita somente releases finais e assets oficiais do GitHub,
+  impede downgrade e não altera modelos, componentes, configurações,
+  transcrições ou dados locais.
+
+### Corrigido
+- O ambiente do workflow de testes volta a instalar as dependências visuais
+  necessárias para importar e testar o HUD e as configurações.
+
 ## [2.2.11] - 2026-07-21
 
 ### Distribuição
