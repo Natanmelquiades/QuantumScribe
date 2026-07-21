@@ -4,6 +4,15 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [2.2.11] - 2026-07-21
+
+### Distribuição
+- Preparada a release pública Windows `v2.2.11`, com instalador, pacote portátil,
+  componentes opcionais e hashes SHA-256 verificados pela automação de release.
+
+### Documentação
+- Adicionado PRD de distribuição pública da versão Windows `v2.2.11`.
+
 ## [2.2.1] - 2026-07-19
 
 ### Adicionado
