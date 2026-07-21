@@ -1,8 +1,8 @@
 # PRD QS-017 — Estabilidade do HUD, cancelamento e inicialização
 
-**Status:** proposta de correção baseada em auditoria de código  
-**Prioridade:** P1 — Alta  
-**Esforço preliminar:** M  
+**Status:** proposta de correção baseada em auditoria de código
+**Prioridade:** P1 — Alta
+**Esforço preliminar:** M
 **Relacionado a:** QS-004, QS-007 e QS-016
 
 ## Contexto e impacto

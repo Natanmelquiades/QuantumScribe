@@ -1,7 +1,7 @@
 # PRD — Implementação integral do Product Backlog
 
-**Status:** aprovado para planejamento e execução por ondas  
-**Escopo:** QS-001 a QS-016  
+**Status:** aprovado para planejamento e execução por ondas
+**Escopo:** QS-001 a QS-016
 **Prioridade do programa:** estabilizar o fluxo principal antes de expandir
 capacidades locais e, por último, validar a oferta cloud opcional.
 
