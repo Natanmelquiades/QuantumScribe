@@ -1,4 +1,4 @@
-name: Build Windows release
+name: Build Windows and Linux release
 
 on:
   push:
@@ -23,7 +23,11 @@ jobs:
           cache-dependency-path: requirements-linux.txt
 
       - name: Install Linux system dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3-tk portaudio19-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk python3-dev build-essential pkg-config \
+            portaudio19-dev libcairo2-dev libgirepository-2.0-dev \
+            gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
 
       - name: Build Linux application
         run: bash build_linux.sh
@@ -32,7 +36,8 @@ jobs:
         run: |
           version=$(python -c "from localwhisper import __version__; print(__version__)")
           test -x dist/QuantumScribe/QuantumScribe
-          tar -C dist -czf "QuantumScribe-Core-$version-Linux-x64.tar.gz" QuantumScribe
+          tar -czf "QuantumScribe-Core-$version-Linux-x64.tar.gz" \
+            -C dist QuantumScribe -C .. install_linux_shortcut.sh
           sha256sum "QuantumScribe-Core-$version-Linux-x64.tar.gz" > SHA256SUMS-Linux.txt
 
       - name: Create draft release with Linux assets

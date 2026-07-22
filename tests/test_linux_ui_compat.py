@@ -31,9 +31,30 @@ def test_tray_title_is_x11_compatible(monkeypatch):
         captured["title"] = title
         return Mock()
 
+    fake_icon.HAS_MENU = True
     monkeypatch.setattr("localwhisper.tray.pystray.Icon", fake_icon)
     monkeypatch.setattr("localwhisper.tray.create_icon", Mock())
 
     TrayIcon(Mock(), Mock(), Mock())
 
     captured["title"].encode("latin-1")
+
+
+def test_tray_default_action_opens_settings_instead_of_recording(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_icon(_name, _image, _title, **kwargs):
+        captured["menu"] = kwargs["menu"]
+        return Mock()
+
+    fake_icon.HAS_MENU = False
+    monkeypatch.setattr("localwhisper.tray.pystray.Icon", fake_icon)
+    monkeypatch.setattr("localwhisper.tray.create_icon", Mock())
+
+    TrayIcon(Mock(), Mock(), Mock())
+
+    items = captured["menu"].items
+    assert items[0].text == "Iniciar/parar ditado"
+    assert items[0].default is False
+    assert items[1].text == "Abrir configurações"
+    assert items[1].default is True

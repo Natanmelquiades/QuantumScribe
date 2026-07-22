@@ -5,13 +5,16 @@ datas = [('localwhisper/assets/icon.png', 'localwhisper/assets')]
 binaries = []
 hiddenimports = [
     'onnxruntime', 'scipy', 'noisereduce', 'huggingface_hub', 'pynput',
-    'PIL._tkinter_finder',
+    'PIL._tkinter_finder', 'gi', 'gi.repository.Gtk',
+    'gi.repository.AyatanaAppIndicator3',
 ]
 tmp_ret = collect_all('faster_whisper')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('ctranslate2')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('av')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('gi')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(

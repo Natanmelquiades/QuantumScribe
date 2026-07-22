@@ -148,13 +148,19 @@ pasta `_internal` contém bibliotecas necessárias para o aplicativo funcionar.
 
 ### Opção 3 — Linux x64
 
-1. Instale os utilitários do sistema: `python3-tk`, `portaudio19-dev`, `xdotool`,
-   `xclip` e `wl-clipboard`.
+1. Instale os utilitários do sistema: `python3-tk`, `portaudio19-dev`,
+   `gir1.2-ayatanaappindicator3-0.1`, `xdotool`, `xclip`, `wl-clipboard` e
+   `desktop-file-utils`.
 2. Baixe `QuantumScribe-Core-<versão>-Linux-x64.tar.gz` na release mais recente.
-3. Extraia o pacote e execute `QuantumScribe/QuantumScribe`.
+3. Extraia o pacote e execute `./install_linux_shortcut.sh` no terminal. O
+   instalador copia o aplicativo para seu usuário, registra-o no menu e cria um
+   atalho na área de trabalho.
 
 Em Wayland, a área de transferência usa `wl-copy`; a simulação de teclado pode
 depender das permissões do compositor. Em X11, o fluxo usa `xdotool` e `xclip`.
+No Ubuntu/GNOME, o menu da bandeja usa AppIndicator; clique no ícone para abrir
+as opções. Se AppIndicator não estiver disponível, o clique abre diretamente as
+configurações e nunca inicia uma gravação acidental.
 
 ### Opção 4 — código-fonte para desenvolvimento
 

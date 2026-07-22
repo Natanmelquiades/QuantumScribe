@@ -29,6 +29,7 @@ def test_linux_packaging_sources_exist():
         ROOT / "QuantumScribe-Linux.spec",
         ROOT / "requirements-linux.txt",
         ROOT / "install_linux.sh",
+        ROOT / "install_linux_shortcut.sh",
         ROOT / "run_linux.sh",
         ROOT / "build_linux.sh",
     )
@@ -36,9 +37,12 @@ def test_linux_packaging_sources_exist():
     assert all(path.is_file() for path in expected)
     build_script = (ROOT / "build_linux.sh").read_text(encoding="utf-8")
     spec = (ROOT / "QuantumScribe-Linux.spec").read_text(encoding="utf-8")
+    release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert 'pip install -r requirements-linux.txt' in build_script
     assert build_script.index('pip install -r requirements-linux.txt') > build_script.index('fi\n')
     assert "'PIL._tkinter_finder'" in spec
+    assert "'gi.repository.AyatanaAppIndicator3'" in spec
+    assert "install_linux_shortcut.sh" in release
 
 
 def test_core_explicitly_excludes_heavy_optional_runtimes():
