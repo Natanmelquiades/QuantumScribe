@@ -970,11 +970,9 @@ def main() -> None:
             previous_pid = int(sys.argv[index + 1])
         except (ValueError, IndexError):
             return
-        if sys.platform == "win32" and previous_pid > 0:
-            handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, previous_pid)
-            if handle:
-                ctypes.windll.kernel32.WaitForSingleObject(handle, 15000)
-                ctypes.windll.kernel32.CloseHandle(handle)
+        if previous_pid > 0:
+            from .platform import wait_for_process_exit
+            wait_for_process_exit(previous_pid, 15000)
 
     if not acquire_single_instance():
         import sys

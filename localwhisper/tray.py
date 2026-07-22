@@ -42,7 +42,7 @@ class TrayIcon:
         self.icon = pystray.Icon(
             "QuantumScribe",
             create_icon(),
-            "Quantum Scribe — Ctrl+Space",
+            "Quantum Scribe - Ctrl+Space",
             menu=pystray.Menu(
                 pystray.MenuItem("Iniciar/parar ditado", on_toggle, default=True),
                 pystray.MenuItem("Abrir configurações", on_open_config),

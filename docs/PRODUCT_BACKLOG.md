@@ -72,6 +72,8 @@ mesmo sem prioridade ou especificação completa. Durante o refinamento, cada it
 | QS-016 | Cancelamento intencional por ESC mantido com progresso visual no HUD | Melhoria | Em refinamento | P1 — Alta | M | A criar |
 | QS-017 | Estabilizar HUD, cancelamento e prontidão visual na inicialização | Bug | Em refinamento | P1 — Alta | M | [Abrir PRD](PRD_QS017_ESTABILIDADE_HUD_INICIALIZACAO.md) |
 | QS-018 | Verificar e atualizar somente o aplicativo | Feature | Em refinamento | P2 — Média | G | [Abrir PRD](PRD_QS018_ATUALIZACAO_APLICATIVO.md) |
+| QS-019 | Tornar a instalação e a primeira execução calmas e verificáveis | Melhoria | Em refinamento | P1 — Alta | G | [PRD relacionado](PRD_CORE_LEVE_COMPONENTES_SOB_DEMANDA.md) |
+| QS-020 | Acelerar a primeira transcrição com preparação antecipada | Melhoria | Em refinamento | P1 — Alta | M | A criar |
 
 ## Programa de implementação
 
@@ -669,6 +671,137 @@ _Nenhum item aguardando triagem._
   mecanismo de iniciador acompanhará o fechamento para executar o instalador com
   confiabilidade.
 - **Especificação:** [PRD QS-018 — Atualização do aplicativo](PRD_QS018_ATUALIZACAO_APLICATIVO.md)
+
+### QS-019 — Tornar a instalação e a primeira execução calmas e verificáveis
+
+- **Tipo:** Melhoria de confiança, distribuição e onboarding.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** G.
+- **Relacionado a:** QS-005 — Reutilização de modelos; QS-006 — Download
+  resiliente; QS-017 — Prontidão na inicialização; QS-018 — Atualização do
+  aplicativo; QS-020 — Primeira transcrição mais rápida.
+- **Contexto observado:** numa instalação direta no Windows, a primeira
+  impressão combinou o alerta de segurança do sistema com mensagens sobre
+  verificação de componentes, aceleração CUDA e reinício do aplicativo. Mesmo
+  quando essas ações têm finalidade legítima, a sequência e o vocabulário
+  técnico podem parecer invasivos ou suspeitos.
+- **Constatação atual:** o instalador é por usuário e não solicita privilégios de
+  administrador, os componentes são verificados por SHA-256 e o Windows não
+  precisa ser reiniciado. Entretanto, a release pública atual ainda não possui
+  assinatura Authenticode; o aplicativo também apresenta diálogos separados de
+  preparo e eventual reinício, expondo termos como CUDA antes de explicar o
+  benefício para a pessoa.
+- **Resultado desejado:** oferecer um percurso curto e previsível desde o
+  download até o primeiro ditado, mostrando origem, publicador, downloads,
+  armazenamento e ações de reinício de forma concreta, sem alegações vagas de
+  que o produto é “seguro” e sem esconder decisões relevantes.
+- **Brainstorm priorizado:**
+  - assinar o instalador e o executável com Authenticode, carimbo de tempo e uma
+    identidade de publicador estável; preservar o mesmo certificado nas releases
+    para construir reputação, reconhecendo que o SmartScreen pode continuar
+    alertando durante o período inicial;
+  - distribuir por uma página oficial única, com nome e identidade visual
+    consistentes, versão, publicador, origem da release e uma explicação curta do
+    possível alerta antes do download;
+  - apresentar uma única tela de `Preparar o Quantum Scribe`, com linguagem de
+    benefício (`aceleração NVIDIA`) e detalhes técnicos (`CUDA`, hashes, arquivos
+    e origem) recolhidos sob `Ver detalhes`;
+  - mostrar antecipadamente a lista exata, tamanho total e destino dos downloads,
+    distinguindo o modelo obrigatório dos componentes opcionais;
+  - substituir mensagens genéricas como `verificado/seguro` por fatos
+    verificáveis, por exemplo `integridade conferida`, `publicado por ...`,
+    `áudio processado neste computador` e `nenhuma reinicialização do Windows`;
+  - agrupar download, validação e ativação num progresso contínuo, evitando uma
+    sucessão de caixas de diálogo e confirmações redundantes;
+  - instalar apenas o necessário para a máquina e para funções escolhidas; não
+    baixar aceleração NVIDIA, VAD ou outros componentes opcionais sem necessidade
+    e consentimento claro;
+  - ativar componentes no mesmo processo sempre que tecnicamente possível; se
+    for indispensável reiniciar, dizer `Reiniciar somente o Quantum Scribe`,
+    oferecer `Agora` e `Depois` e nunca sugerir reinício do Windows;
+  - após a preparação, encerrar com uma ação positiva e concreta, como `Pronto
+    para o primeiro ditado`, em vez de outra mensagem técnica de verificação;
+  - criar um checklist de release que valide assinatura, nome do publicador,
+    reputação/alertas observados, hashes, origem dos downloads e instalação limpa
+    em Windows 10 e 11.
+- **Regras e cuidados preliminares:**
+  - assinatura e reputação reduzem desconfiança, mas a interface e a documentação
+    não podem prometer ausência garantida de alertas do Windows;
+  - não usar selos, cores ou textos que afirmem segurança absoluta;
+  - não enfraquecer hash, validação de origem, consentimento ou isolamento de
+    componentes para deixar o fluxo aparentemente mais simples;
+  - manter acessível um diagnóstico técnico copiável sem expor áudio,
+    transcrições ou caminhos pessoais;
+  - permitir sair do onboarding e explorar o aplicativo sem instalar componentes
+    opcionais.
+- **Critérios principais de aceite:**
+  - numa instalação limpa, existe no máximo uma confirmação do plano de preparo
+    antes do progresso e, quando necessário, uma única decisão final para
+    reiniciar somente o aplicativo;
+  - o fluxo nunca solicita nem sugere reiniciar o Windows;
+  - instalador e executável de uma release final exibem assinatura Authenticode
+    válida, com publicador e carimbo de tempo esperados, e falha de assinatura
+    bloqueia a publicação;
+  - antes de qualquer download, a pessoa consegue identificar o que será baixado,
+    por que é necessário, tamanho aproximado, destino e se é opcional;
+  - um teste moderado com novos usuários consegue distinguir corretamente
+    `integridade conferida` de uma promessa de segurança absoluta e relata menor
+    desconfiança do que no fluxo atual.
+- **Próxima decisão:** definir o orçamento e o tipo de certificado de assinatura,
+  escolher a identidade pública estável do editor e prototipar a tela única de
+  preparo antes de alterar o fluxo existente.
+- **Especificação relacionada:** [PRD — Core leve e componentes sob
+  demanda](PRD_CORE_LEVE_COMPONENTES_SOB_DEMANDA.md).
+
+### QS-020 — Acelerar a primeira transcrição com preparação antecipada
+
+- **Tipo:** Melhoria de desempenho e primeira experiência.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-006 — Download resiliente; QS-017 — Prontidão na
+  inicialização; QS-019 — Instalação e primeira execução calmas.
+- **Problema observado:** a primeira transcrição demora sensivelmente mais e
+  prejudica a primeira impressão. Hoje o pré-carregamento do modelo está
+  desativado por padrão; assim, o primeiro ditado pode pagar de uma vez o custo
+  de detectar o hardware, carregar o modelo na memória e inicializar o motor de
+  inferência.
+- **Resultado desejado:** preparar o motor em segundo plano assim que o modelo e
+  os componentes escolhidos estiverem prontos, para que o primeiro ditado
+  percebido pela pessoa se aproxime da velocidade das transcrições seguintes sem
+  atrasar a abertura da bandeja nem bloquear a interface.
+- **Regras preliminares:**
+  - instrumentar separadamente download, seleção de hardware, carga do modelo,
+    aquecimento e inferência para confirmar onde está o atraso em CPU e GPU;
+  - iniciar a preparação somente depois que a interface estiver responsiva e o
+    onboarding não estiver aguardando uma decisão;
+  - reutilizar exatamente a instância preparada no primeiro ditado, evitando
+    carga duplicada ou disputa entre threads;
+  - executar com prioridade baixa, permitir cancelamento e adiar em máquinas com
+    pouca memória, bateria crítica ou pressão relevante de CPU/RAM;
+  - avaliar um aquecimento mínimo e local, sem microfone, áudio do usuário,
+    telemetria nem texto persistido;
+  - se a pessoa começar a ditar durante a preparação, priorizar o ditado e exibir
+    um estado honesto e curto, como `Preparando o reconhecimento pela primeira
+    vez`, sem reiniciar o trabalho já concluído;
+  - manter o comportamento sob demanda como fallback e opção para quem prefere
+    menor uso de memória;
+  - medir separadamente `app iniciado → pronto para gravar` e `fim da gravação →
+    texto entregue`, para não melhorar uma métrica piorando silenciosamente a
+    outra.
+- **Critérios principais de aceite:**
+  - em instalações limpas de referência CPU e NVIDIA, a mediana de `fim da
+    gravação → texto entregue` na primeira transcrição melhora pelo menos 30% em
+    relação ao fluxo atual, usando o mesmo áudio, modelo e configurações;
+  - a preparação não aumenta em mais de 500 ms o tempo até o ícone da bandeja e
+    os atalhos básicos ficarem responsivos;
+  - quando a preparação termina antes do primeiro ditado, a instrumentação
+    confirma uma única carga do modelo e a primeira transcrição reutiliza a
+    instância já pronta;
+  - falha, cancelamento ou falta de recursos durante a preparação não impede a
+    gravação e recua para o carregamento sob demanda com mensagem clara.
+- **Próxima decisão:** coletar uma linha de base em hardware fraco, intermediário
+  e NVIDIA, validar os limites de memória e decidir se a preparação antecipada
+  será padrão automático ou uma preferência explícita.
 
 ## Pronto para priorização
 

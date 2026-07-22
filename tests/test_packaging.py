@@ -24,6 +24,23 @@ def test_windows_packaging_sources_exist():
     assert all(path.is_file() for path in expected)
 
 
+def test_linux_packaging_sources_exist():
+    expected = (
+        ROOT / "QuantumScribe-Linux.spec",
+        ROOT / "requirements-linux.txt",
+        ROOT / "install_linux.sh",
+        ROOT / "run_linux.sh",
+        ROOT / "build_linux.sh",
+    )
+
+    assert all(path.is_file() for path in expected)
+    build_script = (ROOT / "build_linux.sh").read_text(encoding="utf-8")
+    spec = (ROOT / "QuantumScribe-Linux.spec").read_text(encoding="utf-8")
+    assert 'pip install -r requirements-linux.txt' in build_script
+    assert build_script.index('pip install -r requirements-linux.txt') > build_script.index('fi\n')
+    assert "'PIL._tkinter_finder'" in spec
+
+
 def test_core_explicitly_excludes_heavy_optional_runtimes():
     spec = (ROOT / "QuantumScribe.spec").read_text(encoding="utf-8")
 
@@ -41,6 +58,9 @@ def test_release_build_separates_core_and_optional_components():
     assert "build_optional_components.ps1" in release
     assert "QuantumScribe-CUDA-" in release
     assert "QuantumScribe-SileroVAD-" in release
+    assert "build-linux:" in release
+    assert "QuantumScribe-Core-$version-Linux-x64.tar.gz" in release
+    assert "gh release edit $tag --draft=false --latest" in release
 
 
 def test_backup_feature_is_not_shipped():

@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 import traceback
@@ -26,8 +25,14 @@ def check_and_restart_in_venv():
         in_venv = False
 
     if not in_venv:
-        # Localiza o executável pythonw.exe do .venv
-        venv_python = venv_dir / "Scripts" / "pythonw.exe"
+        # Localiza o executável python do .venv (Windows vs Linux)
+        if sys.platform == "win32":
+            venv_python = venv_dir / "Scripts" / "pythonw.exe"
+            if not venv_python.is_file():
+                venv_python = venv_dir / "Scripts" / "python.exe"
+        else:
+            venv_python = venv_dir / "bin" / "python"
+
         if venv_python.is_file():
             args = [str(venv_python), str(Path(__file__).resolve())] + sys.argv[1:]
             subprocess.Popen(args, creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
@@ -37,9 +42,8 @@ def check_and_restart_in_venv():
 check_and_restart_in_venv()
 
 def setup_logging():
-    # Caminho do diretório de dados do app (%LOCALAPPDATA%\QuantumScribe)
-    base = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "QuantumScribe"
-    base.mkdir(parents=True, exist_ok=True)
+    from localwhisper.config import app_data_dir
+    base = app_data_dir()
     log_path = base / "app.log"
 
     # Redireciona sys.stdout e sys.stderr para o arquivo com bufferização de linha
