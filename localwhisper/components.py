@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -70,8 +71,11 @@ def component_dir(key: str, version: str = __version__) -> Path:
 
 
 def component_installed(key: str, version: str = __version__) -> bool:
+    return compatible_component_root(key, version) is not None
+
+
+def _valid_component_root(key: str, root: Path, version: str) -> bool:
     spec = _specs(version)[key]
-    root = component_dir(key, version)
     marker = root / "component.json"
     if not marker.is_file():
         return False
@@ -81,9 +85,34 @@ def component_installed(key: str, version: str = __version__) -> bool:
         return False
     return (
         data.get("key") == key
-        and data.get("version") == version
+        and data.get("version") == root.name
         and all((root / relative).is_file() for relative in spec.required_files)
     )
+
+
+def compatible_component_root(key: str, version: str = __version__) -> Path | None:
+    """Reutiliza componentes verificados entre patches da mesma linha major.minor."""
+    requested = tuple(int(part) for part in version.split("."))
+    exact = component_dir(key, version)
+    if _valid_component_root(key, exact, version):
+        return exact
+
+    parent = exact.parent
+    try:
+        candidates = []
+        for root in parent.iterdir():
+            try:
+                candidate = tuple(int(part) for part in root.name.split("."))
+            except ValueError:
+                continue
+            if len(candidate) == 3 and candidate[:2] == requested[:2]:
+                candidates.append((candidate, root))
+    except OSError:
+        return None
+    for _candidate, root in sorted(candidates, reverse=True):
+        if _valid_component_root(key, root, version):
+            return root
+    return None
 
 
 def nvidia_gpu_detected() -> tuple[bool, str]:
@@ -116,17 +145,38 @@ def nvidia_gpu_detected() -> tuple[bool, str]:
 
 def _read_url(url: str, max_bytes: int) -> bytes:
     request = urllib.request.Request(url, headers={"User-Agent": f"QuantumScribe/{__version__}"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        final_host = (urllib.parse.urlparse(response.geturl()).hostname or "").lower()
-        if final_host not in _ALLOWED_DOWNLOAD_HOSTS:
-            raise RuntimeError(f"Download redirecionado para host não autorizado: {final_host}")
-        declared = response.headers.get("Content-Length")
-        if declared and int(declared) > max_bytes:
-            raise RuntimeError("Download excede o tamanho máximo permitido")
-        data = response.read(max_bytes + 1)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            final_host = (urllib.parse.urlparse(response.geturl()).hostname or "").lower()
+            if final_host not in _ALLOWED_DOWNLOAD_HOSTS:
+                raise RuntimeError(f"Download redirecionado para host não autorizado: {final_host}")
+            declared = response.headers.get("Content-Length")
+            if declared and int(declared) > max_bytes:
+                raise RuntimeError("Download excede o tamanho máximo permitido")
+            data = response.read(max_bytes + 1)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise RuntimeError(
+                "Os componentes opcionais desta versão ainda não estão disponíveis."
+            ) from error
+        raise RuntimeError("Não foi possível consultar os componentes opcionais.") from error
+    except urllib.error.URLError as error:
+        raise RuntimeError("Não foi possível acessar os componentes opcionais.") from error
     if len(data) > max_bytes:
         raise RuntimeError("Download excede o tamanho máximo permitido")
     return data
+
+
+def component_release_available(key: str, version: str = __version__) -> bool:
+    """Confirma silenciosamente que a release publicou o componente antes de oferecê-lo."""
+    spec = _specs(version)[key]
+    release_url = f"{_RELEASE_BASE}/v{version}"
+    try:
+        checksums = _read_url(f"{release_url}/SHA256SUMS.txt", _MAX_CHECKSUM_BYTES)
+        _expected_hash(checksums, spec.asset_name)
+    except (OSError, RuntimeError):
+        return False
+    return True
 
 
 def _download_url(url: str, destination: Path, max_bytes: int) -> None:
@@ -213,8 +263,9 @@ def install_component(
 ) -> Path:
     """Baixa um ZIP da release correspondente, valida e instala de forma atômica."""
     spec = _specs(version)[key]
-    if component_installed(key, version):
-        return component_dir(key, version)
+    installed_root = compatible_component_root(key, version)
+    if installed_root is not None:
+        return installed_root
 
     status = on_status or (lambda _message: None)
     release_url = f"{_RELEASE_BASE}/v{version}"
@@ -256,4 +307,8 @@ def install_component(
 
 
 def installed_component_roots(keys: Iterable[str] = ("cuda",)) -> tuple[Path, ...]:
-    return tuple(component_dir(key) for key in keys if component_installed(key))
+    return tuple(
+        root
+        for key in keys
+        if (root := compatible_component_root(key)) is not None
+    )

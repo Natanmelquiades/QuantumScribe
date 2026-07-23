@@ -76,6 +76,7 @@ class AppConfig:
     quantum_brain_sync_threshold: int = 5          # Nº de notas brutas para acionar síntese imediata
     quantum_brain_also_paste: bool = True          # Também cola o texto no cursor (como o modo normal)
     quantum_brain_api_key: str = ""               # Reservado para futura integração cloud
+    setup_prompt_dismissed_signature: str = ""     # Não repetir a mesma oferta de preparação a cada abertura
 
     def __post_init__(self) -> None:
         """Mantém o modelo efetivo alinhado quando a configuração nasce em memória."""

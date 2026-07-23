@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -241,6 +240,13 @@ def schedule_update_after_exit(installer: Path, expected_hash: str, parent_pid: 
     if not installer.is_file() or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
         raise UpdateError("O instalador preparado para atualização é inválido.")
     verify_sha256(installer, expected_hash)
+    installer_match = re.fullmatch(
+        r"QuantumScribe-Setup-(\d+\.\d+\.\d+)-Windows-x64\.exe",
+        installer.name,
+    )
+    if not installer_match:
+        raise UpdateError("O nome do instalador preparado para atualização é inválido.")
+    expected_version = installer_match.group(1)
 
     system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
     powershell = system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
@@ -248,6 +254,7 @@ def schedule_update_after_exit(installer: Path, expected_hash: str, parent_pid: 
         raise UpdateError("O atualizador do Windows não foi encontrado.")
     installed_app = Path(os.environ.get("LOCALAPPDATA", app_data_dir().parent)) / "Programs" / "QuantumScribe" / "QuantumScribe.exe"
     status_file = installer.parent / "update-status.txt"
+    helper_script = installer.parent / "apply-update.ps1"
 
     def ps_literal(path: Path) -> str:
         return "'" + str(path).replace("'", "''") + "'"
@@ -255,28 +262,67 @@ def schedule_update_after_exit(installer: Path, expected_hash: str, parent_pid: 
     script = f"""
 $ErrorActionPreference = 'Stop'
 $status = {ps_literal(status_file)}
+$installedApp = {ps_literal(installed_app)}
+$result = 0
 try {{
+  'waiting-for-app-exit' | Set-Content -LiteralPath $status -Encoding UTF8
   $deadline = [DateTime]::UtcNow.AddSeconds(60)
   while ((Get-Process -Id {int(parent_pid)} -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $deadline) {{
     Start-Sleep -Milliseconds 250
   }}
   if (Get-Process -Id {int(parent_pid)} -ErrorAction SilentlyContinue) {{ throw 'O aplicativo não encerrou a tempo.' }}
-  $actual = (Get-FileHash -LiteralPath {ps_literal(installer)} -Algorithm SHA256).Hash.ToLowerInvariant()
+  $stream = [IO.File]::OpenRead({ps_literal(installer)})
+  try {{
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {{
+      $actual = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+    }} finally {{
+      $sha256.Dispose()
+    }}
+  }} finally {{
+    $stream.Dispose()
+  }}
   if ($actual -ne '{expected_hash.lower()}') {{ throw 'SHA-256 do instalador não corresponde à release.' }}
+  'installing' | Set-Content -LiteralPath $status -Encoding UTF8
   $setup = Start-Process -FilePath {ps_literal(installer)} -ArgumentList '/S' -PassThru -Wait
   if ($setup.ExitCode -ne 0) {{ throw "Instalador encerrou com código $($setup.ExitCode)." }}
+  if (-not (Test-Path -LiteralPath $installedApp)) {{ throw 'O executável instalado não foi encontrado.' }}
+  $installedVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($installedApp).ProductVersion
+  if ($installedVersion -ne '{expected_version}') {{
+    throw "A instalação terminou, mas a versão encontrada foi $installedVersion em vez de {expected_version}."
+  }}
   'success' | Set-Content -LiteralPath $status -Encoding UTF8
-  if (Test-Path -LiteralPath {ps_literal(installed_app)}) {{ Start-Process -FilePath {ps_literal(installed_app)} }}
 }} catch {{
-  $_.Exception.Message | Set-Content -LiteralPath $status -Encoding UTF8
-  exit 1
+  "error: $($_.Exception.Message)" | Set-Content -LiteralPath $status -Encoding UTF8
+  $result = 1
+}} finally {{
+  if (Test-Path -LiteralPath $installedApp) {{ Start-Process -FilePath $installedApp }}
 }}
+exit $result
 """.strip()
-    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    # Um arquivo legível evita o padrão -EncodedCommand, frequentemente
+    # interceptado por proteções do Windows sem devolver um erro ao aplicativo.
+    # UTF-8 com BOM mantém os textos em português corretos no PowerShell 5.1.
+    helper_script.write_text(script, encoding="utf-8-sig")
+    status_file.write_text("scheduled", encoding="utf-8")
+    # CREATE_NO_WINDOW já mantém o auxiliar invisível e ele continua vivo após
+    # o processo pai encerrar. Combiná-lo com DETACHED_PROCESS fez o
+    # PowerShell terminar antes de executar o script em máquinas Windows reais.
+    creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         subprocess.Popen(
-            [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encoded],
+            [
+                str(powershell),
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-WindowStyle",
+                "Hidden",
+                "-File",
+                str(helper_script),
+            ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -284,4 +330,8 @@ try {{
             creationflags=creation_flags,
         )
     except OSError as error:
+        status_file.write_text(
+            "Não foi possível iniciar o atualizador do Windows.",
+            encoding="utf-8",
+        )
         raise UpdateError("Não foi possível iniciar o atualizador do Windows.") from error
