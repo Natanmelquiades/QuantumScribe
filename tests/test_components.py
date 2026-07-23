@@ -37,6 +37,32 @@ def test_component_marker_requires_every_expected_file(tmp_path, monkeypatch):
     assert components.component_installed("silero_vad", "2.2.0") is True
 
 
+def test_component_is_reused_across_patch_versions(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    root = components.component_dir("cuda", "2.2.17")
+    for relative in components._specs("2.2.19")["cuda"].required_files:
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_bytes(b"verified")
+    (root / "component.json").write_text(
+        json.dumps({"key": "cuda", "version": "2.2.17"}), encoding="utf-8"
+    )
+
+    assert components.compatible_component_root("cuda", "2.2.19") == root
+    assert components.component_installed("cuda", "2.2.19") is True
+
+
+def test_component_is_not_reused_across_minor_versions(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    root = components.component_dir("silero_vad", "2.1.9")
+    root.mkdir(parents=True)
+    (root / "silero_vad.onnx").write_bytes(b"verified")
+    (root / "component.json").write_text(
+        json.dumps({"key": "silero_vad", "version": "2.1.9"}), encoding="utf-8"
+    )
+
+    assert components.component_installed("silero_vad", "2.2.0") is False
+
+
 def test_expected_hash_matches_exact_asset_name():
     wanted = "a" * 64
     checksums = f"{'b' * 64}  prefix-app.zip\n{wanted}  app.zip\n".encode("ascii")

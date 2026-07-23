@@ -1,12 +1,12 @@
 [project]
 name = "quantumscribe"
-version = "2.2.13"
-description = "Ditado por voz local para Windows com faster-whisper."
+version = "2.2.19"
+description = "Ditado por voz local para Windows e Linux com faster-whisper."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = "MIT"
 authors = [{ name = "Natan Melquiades" }]
-keywords = ["speech-to-text", "whisper", "dictation", "windows", "offline"]
+keywords = ["speech-to-text", "whisper", "dictation", "windows", "linux", "offline"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

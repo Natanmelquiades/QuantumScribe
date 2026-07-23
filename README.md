@@ -2,14 +2,15 @@
   <img src="localwhisper/assets/icon.png" width="112" alt="Ícone do QuantumScribe">
   <h1>QuantumScribe</h1>
   <p><strong>Ditado por voz local, rápido e fiel ao que você falou.</strong></p>
-  <p>Windows · faster-whisper · CPU ou NVIDIA CUDA · Português do Brasil</p>
+  <p>Windows e Linux · faster-whisper · CPU ou NVIDIA CUDA · Português do Brasil</p>
 
   [![Tests](https://github.com/Natanmelquiades/QuantumScribe/actions/workflows/tests.yml/badge.svg)](https://github.com/Natanmelquiades/QuantumScribe/actions/workflows/tests.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-2ea44f.svg)](LICENSE)
   [![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue.svg)](https://www.python.org/)
   [![Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)](https://www.microsoft.com/windows)
+  [![Linux](https://img.shields.io/badge/platform-Linux-FCC624.svg)](https://www.linux.org/)
 
-  [**Baixar para Windows**](https://github.com/Natanmelquiades/QuantumScribe/releases/latest)
+  [**Baixar QuantumScribe**](https://github.com/Natanmelquiades/QuantumScribe/releases/latest)
   · [Ver formas de instalação](#baixar-e-instalar)
   · [Como usar](#como-usar)
 </div>
@@ -22,7 +23,7 @@ focado. O reconhecimento roda no seu computador com
 literal e usa pausas e construções interrogativas para melhorar a pontuação sem
 trocar palavras.
 
-> **English:** QuantumScribe is a local-first Windows dictation app powered by
+> **English:** QuantumScribe is a local-first Windows and Linux dictation app powered by
 > faster-whisper. It offers global shortcuts, literal transcription, conservative
 > punctuation, auto-paste, optional CUDA acceleration and an offline second brain.
 
@@ -71,9 +72,9 @@ trocar palavras.
 
 ## Requisitos
 
-- Windows 10 ou Windows 11;
+- Windows 10/11 ou Ubuntu Linux 24.04/26.04;
 - Python 3.11 a 3.13 para executar pelo código-fonte;
-- microfone reconhecido pelo Windows;
+- microfone reconhecido pelo sistema;
 - conexão à internet apenas para instalar dependências e baixar modelos;
 - espaço livre para o ambiente Python e o modelo escolhido;
 - GPU NVIDIA opcional para aceleração CUDA.
@@ -97,6 +98,7 @@ VRAM e tempo de inicialização no primeiro ditado.
 |---|---|---|
 | **Instalador Windows** — recomendada | quem quer instalar e abrir como um programa normal | `QuantumScribe-Setup-<versão>-Windows-x64.exe` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
 | **Versão portátil** | desenvolvedores e testes sem instalação | `QuantumScribe-Core-<versão>-Windows-x64.zip` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
+| **Linux x64** | Ubuntu e distribuições compatíveis | `QuantumScribe-Core-<versão>-Linux-x64.tar.gz` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
 | **Código-fonte — CPU** | desenvolvimento e contribuição | clone com Git ou [baixe o código em ZIP](https://github.com/Natanmelquiades/QuantumScribe/archive/refs/heads/main.zip) |
 | **Código-fonte — NVIDIA CUDA** | desenvolvimento com GPU NVIDIA compatível | o mesmo código-fonte, iniciado com o perfil CUDA |
 
@@ -144,7 +146,23 @@ demanda e armazenados em `%LOCALAPPDATA%\QuantumScribe`.
 Não execute o programa diretamente de dentro do ZIP e não mova somente o `.exe`: a
 pasta `_internal` contém bibliotecas necessárias para o aplicativo funcionar.
 
-### Opção 3 — código-fonte para desenvolvimento
+### Opção 3 — Linux x64
+
+1. Instale os utilitários do sistema: `python3-tk`, `portaudio19-dev`,
+   `gir1.2-ayatanaappindicator3-0.1`, `xdotool`, `xclip`, `wl-clipboard` e
+   `desktop-file-utils`.
+2. Baixe `QuantumScribe-Core-<versão>-Linux-x64.tar.gz` na release mais recente.
+3. Extraia o pacote e execute `./install_linux_shortcut.sh` no terminal. O
+   instalador copia o aplicativo para seu usuário, registra-o no menu e cria um
+   atalho na área de trabalho.
+
+Em Wayland, a área de transferência usa `wl-copy`; a simulação de teclado pode
+depender das permissões do compositor. Em X11, o fluxo usa `xdotool` e `xclip`.
+No Ubuntu/GNOME, o menu da bandeja usa AppIndicator; clique no ícone para abrir
+as opções. Se AppIndicator não estiver disponível, o clique abre diretamente as
+configurações e nunca inicia uma gravação acidental.
+
+### Opção 4 — código-fonte para desenvolvimento
 
 #### Com Git — perfil CPU recomendado
 
@@ -283,7 +301,17 @@ porque as DLLs e bibliotecas fazem parte do aplicativo. Para gerar o instalador 
 [NSIS](https://nsis.sourceforge.io/) instalado.
 
 Tags `v*` acionam o workflow de release, que testa o código, produz o Core, o instalador
-e os componentes opcionais separados, calcula os hashes SHA-256 e publica tudo na mesma release.
+e os componentes opcionais separados para Windows, produz o Core Linux x64, calcula
+os hashes SHA-256 e publica tudo na mesma release.
+
+## Build para Linux
+
+```bash
+./install_linux.sh
+./build_linux.sh
+```
+
+O build usa um ambiente `.venv-linux` separado e gera `dist/QuantumScribe/`.
 
 ## Solução de problemas
 

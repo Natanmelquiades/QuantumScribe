@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.pytest-tmp/
 .ruff_cache/
 .mypy_cache/
 .coverage
@@ -10,6 +11,45 @@ htmlcov/
 
 # Virtual environments
 .venv/
+.venv-linux/
+.venv-build/
+.venv-build-core/
+.component-build/
+venv/
+env/
+
+# Generated builds and local experiments
+build/
+dist/
+backups/
+temp_test/
+installer/generated_uninstall_files.nsh
+*.zip
+*.log
+*.wav
+
+# Models and user data
+models/
+.env
+.env.*
+!.env.example
+config.json
+**/config.json
+!config.example.json
+diary/
+quantum_brain/
+*.pem
+*.pfx
+*.key
+
+# Editors and OS
+.idea/
+.vscode/
+.agents/
+.DS_Store
+Thumbs.db
+desktop.ini
+
 .venv-build/
 .venv-build-core/
 .component-build/
@@ -54,5 +94,6 @@ LocalWhisper.spec.bak
 # Internal publication audit reports
 docs/AUDITORIA_PUBLICACAO_*.md
 
-# Keep the official PyInstaller recipe tracked.
+# Keep the official PyInstaller recipes tracked.
 !QuantumScribe.spec
+!QuantumScribe-Linux.spec

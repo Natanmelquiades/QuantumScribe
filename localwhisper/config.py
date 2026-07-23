@@ -76,6 +76,7 @@ class AppConfig:
     quantum_brain_sync_threshold: int = 5          # Nº de notas brutas para acionar síntese imediata
     quantum_brain_also_paste: bool = True          # Também cola o texto no cursor (como o modo normal)
     quantum_brain_api_key: str = ""               # Reservado para futura integração cloud
+    setup_prompt_dismissed_signature: str = ""     # Não repetir a mesma oferta de preparação a cada abertura
 
     def __post_init__(self) -> None:
         """Mantém o modelo efetivo alinhado quando a configuração nasce em memória."""
@@ -94,8 +95,14 @@ def app_data_dir() -> Path:
     """Retorna o diretório base para salvar arquivos locais do aplicativo.
 
     No Windows, geralmente aponta para %LOCALAPPDATA%\\QuantumScribe.
+    No Linux, aponta para $XDG_DATA_HOME/QuantumScribe ou ~/.local/share/QuantumScribe.
     """
-    base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    import sys
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home()))
+    else:
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        base = Path(xdg_data) if xdg_data else Path.home() / ".local" / "share"
     path = base / APP_NAME
     path.mkdir(parents=True, exist_ok=True)
     return path

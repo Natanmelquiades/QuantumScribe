@@ -78,6 +78,7 @@ class QuantumScribeApp:
         self._transcription_thread: threading.Thread | None = None
         self._recording_session = 0
         self._cancel_confirmation_pending_session: int | None = None
+        self._setup_offer_pending = False
 
         # Estado ativo do ditado atual (atualizado no início da gravação)
         self._active_translate = False
@@ -665,8 +666,8 @@ class QuantumScribeApp:
 
     def _offer_initial_setup(self) -> None:
         """Monta automaticamente apenas o plano necessário para esta máquina."""
-        from tkinter import messagebox
-
+        if self._setup_offer_pending:
+            return
         from .components import component_installed, nvidia_gpu_detected
         from .config import is_model_downloaded
         from .hardware import cuda_runtime_status
@@ -678,6 +679,56 @@ class QuantumScribeApp:
         needs_cuda = gpu_detected and not cuda_ready and not component_installed("cuda")
         needs_vad = bool(self.config.streaming_mode) and not component_installed("silero_vad")
         if not (needs_model or needs_cuda or needs_vad):
+            return
+        self._setup_offer_pending = True
+
+        def resolve_optional_assets() -> None:
+            from .components import component_release_available
+
+            cuda_available = needs_cuda and component_release_available("cuda")
+            vad_available = needs_vad and component_release_available("silero_vad")
+            self.root.after(
+                0,
+                lambda: self._show_initial_setup_offer(
+                    needs_model,
+                    cuda_available,
+                    vad_available,
+                    model_name,
+                    gpu_detail,
+                ),
+            )
+
+        if needs_cuda or needs_vad:
+            threading.Thread(
+                target=resolve_optional_assets,
+                daemon=True,
+                name="quantumscribe-component-preflight",
+            ).start()
+        else:
+            self._show_initial_setup_offer(needs_model, False, False, model_name, gpu_detail)
+
+    def _show_initial_setup_offer(
+        self,
+        needs_model: bool,
+        needs_cuda: bool,
+        needs_vad: bool,
+        model_name: str,
+        gpu_detail: str,
+    ) -> None:
+        """Mostra no máximo uma vez cada plano realmente disponível."""
+        from tkinter import messagebox
+
+        self._setup_offer_pending = False
+        if not (needs_model or needs_cuda or needs_vad):
+            return
+        signature = "|".join(
+            (
+                f"model:{model_name}" if needs_model else "",
+                "cuda" if needs_cuda else "",
+                "silero_vad" if needs_vad else "",
+            )
+        )
+        if self.config.setup_prompt_dismissed_signature == signature:
             return
 
         items: list[str] = []
@@ -697,7 +748,13 @@ class QuantumScribeApp:
             parent=self.root,
         )
         if not confirmed:
+            self.config.setup_prompt_dismissed_signature = signature
+            try:
+                save_config(self.config)
+            except OSError:
+                pass
             return
+        self.config.setup_prompt_dismissed_signature = ""
         threading.Thread(
             target=self._install_setup_plan,
             args=(needs_model, needs_cuda, needs_vad, model_name),
@@ -910,6 +967,10 @@ class QuantumScribeApp:
         if self.settings_window is not None and self.settings_window.winfo_exists():
             self.settings_window.destroy()
         self.exit()
+        # O atualizador já foi iniciado e todos os recursos controlados pelo app
+        # foram liberados. Garanta que bibliotecas de terceiros ou executores
+        # ociosos não mantenham o processo (e o executável) presos em segundo plano.
+        os._exit(0)
 
     def save_and_apply_config(self, new_config: AppConfig) -> None:
         """Salva a nova configuração em disco e aplica dinamicamente na execução."""
@@ -938,7 +999,6 @@ class QuantumScribeApp:
                 _orchestrator_instance.update_config(new_config)
         except Exception:
             pass
-        self.root.after(100, self._offer_initial_setup)
 
     def exit(self) -> None:
         """Desregistra recursos do sistema e encerra o processo de forma limpa."""
@@ -953,6 +1013,7 @@ class QuantumScribeApp:
         self._unregister_all_hotkeys()
         self.tray.stop()
         self.root.quit()
+        self.root.destroy()
 
 
 def main() -> None:
@@ -970,11 +1031,9 @@ def main() -> None:
             previous_pid = int(sys.argv[index + 1])
         except (ValueError, IndexError):
             return
-        if sys.platform == "win32" and previous_pid > 0:
-            handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, previous_pid)
-            if handle:
-                ctypes.windll.kernel32.WaitForSingleObject(handle, 15000)
-                ctypes.windll.kernel32.CloseHandle(handle)
+        if previous_pid > 0:
+            from .platform import wait_for_process_exit
+            wait_for_process_exit(previous_pid, 15000)
 
     if not acquire_single_instance():
         import sys

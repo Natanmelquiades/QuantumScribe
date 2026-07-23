@@ -29,28 +29,15 @@ Destaques da Implementação:
 
 from __future__ import annotations
 
-import ctypes
 import math
 import time
 import tkinter as tk
 from collections.abc import Callable
-from ctypes import wintypes
 
 from PIL import Image, ImageDraw, ImageTk
 
 from .config import AppConfig
-
-# ---------- WinAPI para janela não-ativável (HUD flutuante) ----------
-
-_user32 = ctypes.windll.user32
-_user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-_user32.GetWindowLongW.restype = ctypes.c_long
-_user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
-_user32.SetWindowLongW.restype = ctypes.c_long
-
-_GWL_EXSTYLE = -20
-_WS_EX_NOACTIVATE = 0x08000000
-_WS_EX_TOOLWINDOW = 0x00000080
+from .platform import make_window_no_activate
 
 # ---------- Cores e Configurações de Layout ----------
 
@@ -231,7 +218,12 @@ class Popup:
         self.window.overrideredirect(True)
         self.window.attributes("-topmost", True)
         self.window.configure(bg=CHROMA)
-        self.window.attributes("-transparentcolor", CHROMA)
+        try:
+            self.window.attributes("-transparentcolor", CHROMA)
+        except tk.TclError:
+            # O Tk no Linux não oferece chroma-key; a opacidade global abaixo
+            # mantém o HUD utilizável sem impedir a inicialização.
+            pass
         self.window.attributes("-alpha", 0.88)
 
         self.window.update_idletasks()
@@ -315,12 +307,7 @@ class Popup:
     # ------------------------------------------------------------------ WinAPI
 
     def _apply_noactivate(self) -> None:
-        hwnd = _user32.GetParent(self.window.winfo_id())
-        ex = _user32.GetWindowLongW(hwnd, _GWL_EXSTYLE)
-        _user32.SetWindowLongW(
-            hwnd, _GWL_EXSTYLE,
-            ex | _WS_EX_NOACTIVATE | _WS_EX_TOOLWINDOW,
-        )
+        make_window_no_activate(self.window)
 
     # ------------------------------------------------------------ Pill Render
 

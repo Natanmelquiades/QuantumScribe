@@ -1,8 +1,24 @@
 from __future__ import annotations
 
+import os
+import sys
 import threading
 from pathlib import Path
 from typing import Callable
+
+# O backend Xorg do pystray não implementa menus; no Ubuntu preferimos
+# AppIndicator quando as bibliotecas do sistema estão disponíveis.
+if sys.platform.startswith("linux"):
+    try:
+        import gi
+
+        gi.require_version("AyatanaAppIndicator3", "0.1")
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import AyatanaAppIndicator3, Gtk  # noqa: F401
+    except (ImportError, ValueError):
+        pass
+    else:
+        os.environ.setdefault("PYSTRAY_BACKEND", "appindicator")
 
 import pystray
 from PIL import Image, ImageDraw
@@ -39,13 +55,16 @@ class TrayIcon:
         on_open_config: Callable[[], None],
         on_exit: Callable[[], None],
     ) -> None:
+        has_context_menu = pystray.Icon.HAS_MENU
         self.icon = pystray.Icon(
             "QuantumScribe",
             create_icon(),
-            "Quantum Scribe — Ctrl+Space",
+            "Quantum Scribe - Ctrl+Space",
             menu=pystray.Menu(
-                pystray.MenuItem("Iniciar/parar ditado", on_toggle, default=True),
-                pystray.MenuItem("Abrir configurações", on_open_config),
+                pystray.MenuItem("Iniciar/parar ditado", on_toggle, default=has_context_menu),
+                # No fallback Xorg, que não exibe menus, o clique principal abre
+                # as configurações em vez de iniciar uma gravação por acidente.
+                pystray.MenuItem("Abrir configurações", on_open_config, default=not has_context_menu),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Sair", on_exit),
             ),

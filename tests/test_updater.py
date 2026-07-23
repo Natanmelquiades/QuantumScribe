@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import io
 import json
@@ -159,7 +158,7 @@ def test_schedule_revalidates_hash_before_starting_helper(tmp_path, monkeypatch)
 
 
 def test_schedule_waits_for_app_then_runs_silent_installer(tmp_path, monkeypatch):
-    installer = tmp_path / "updates" / "setup.exe"
+    installer = tmp_path / "updates" / "QuantumScribe-Setup-2.2.18-Windows-x64.exe"
     installer.parent.mkdir()
     installer.write_bytes(b"instalador verificado")
     digest = hashlib.sha256(installer.read_bytes()).hexdigest()
@@ -178,11 +177,33 @@ def test_schedule_waits_for_app_then_runs_silent_installer(tmp_path, monkeypatch
         "Popen",
         lambda args, **kwargs: captured.update(args=args, kwargs=kwargs),
     )
+    monkeypatch.setattr(updater.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(updater.subprocess, "DETACHED_PROCESS", 0x00000008, raising=False)
 
     updater.schedule_update_after_exit(installer, digest, 456)
 
-    script = base64.b64decode(captured["args"][-1]).decode("utf-16-le")
+    helper_script = installer.parent / "apply-update.ps1"
+    script = helper_script.read_text(encoding="utf-8-sig")
     assert "Get-Process -Id 456" in script
+    assert "Security.Cryptography.SHA256" in script
+    assert "Get-FileHash" not in script
     assert "-ArgumentList '/S'" in script
     assert digest in script
     assert str(local_app_data / "Programs" / "QuantumScribe" / "QuantumScribe.exe") in script
+    assert "ProductVersion" in script
+    assert "2.2.18" in script
+    assert "} finally {" in script
+    assert '"error: $($_.Exception.Message)"' in script
+    assert captured["args"][-2:] == ["-File", str(helper_script)]
+    assert captured["kwargs"]["creationflags"] == 0x08000000
+    assert (installer.parent / "update-status.txt").read_text(encoding="utf-8") == "scheduled"
+
+
+def test_schedule_rejects_unexpected_installer_name(tmp_path, monkeypatch):
+    installer = tmp_path / "setup.exe"
+    installer.write_bytes(b"instalador verificado")
+    digest = hashlib.sha256(installer.read_bytes()).hexdigest()
+    monkeypatch.setattr(updater.sys, "platform", "win32")
+
+    with pytest.raises(updater.UpdateError, match="nome do instalador"):
+        updater.schedule_update_after_exit(installer, digest, 456)
