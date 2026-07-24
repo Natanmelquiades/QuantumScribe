@@ -64,6 +64,10 @@ def test_release_build_separates_core_and_optional_components():
     assert "QuantumScribe-SileroVAD-" in release
     assert "build-linux:" in release
     assert "QuantumScribe-Core-$version-Linux-x64.tar.gz" in release
+    assert "Compress-Archive" not in release
+    assert '"QuantumScribe-Core-$version-Windows-x64.zip",' not in release
+    assert 'gh release download $tag --pattern "SHA256SUMS-Linux.txt"' in release
+    assert 'gh release delete-asset $tag "SHA256SUMS-Linux.txt" --yes' in release
     assert "gh release edit $tag --draft=false --latest" in release
 
 

@@ -107,21 +107,27 @@ jobs:
         shell: pwsh
         run: .\scripts\build_optional_components.ps1
 
-      - name: Create portable ZIP and checksums
+      - name: Create consolidated checksums
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $version = (Select-String -Path localwhisper\__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-          $coreZip = "QuantumScribe-Core-$version-Windows-x64.zip"
-          Compress-Archive -Path dist\QuantumScribe\* -DestinationPath $coreZip
+          $tag = "${{ github.ref_name }}"
           $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
           $cuda = Get-ChildItem "dist\QuantumScribe-CUDA-$version-Windows-x64.zip" -File -ErrorAction Stop
           $vad = Get-ChildItem "dist\QuantumScribe-SileroVAD-$version-Windows-x64.zip" -File -ErrorAction Stop
-          $files = @($coreZip, $installer.FullName, $cuda.FullName, $vad.FullName)
-          $lines = foreach ($file in $files) {
+          $files = @($installer.FullName, $cuda.FullName, $vad.FullName)
+          gh release download $tag --pattern "SHA256SUMS-Linux.txt" --dir .
+          if ($LASTEXITCODE -ne 0) {
+            throw "Não foi possível obter o checksum do pacote Linux."
+          }
+          $linuxLines = Get-Content SHA256SUMS-Linux.txt
+          $windowsLines = foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $(Split-Path $file -Leaf)"
           }
-          $lines | Set-Content SHA256SUMS.txt -Encoding ascii
+          @($linuxLines) + @($windowsLines) | Set-Content SHA256SUMS.txt -Encoding ascii
 
       - name: Create GitHub Release
         shell: pwsh
@@ -132,7 +138,6 @@ jobs:
           $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
           $tag = "${{ github.ref_name }}"
           $assets = @(
-            "QuantumScribe-Core-$version-Windows-x64.zip",
             $installer.FullName,
             "dist\QuantumScribe-CUDA-$version-Windows-x64.zip",
             "dist\QuantumScribe-SileroVAD-$version-Windows-x64.zip",
@@ -144,4 +149,9 @@ jobs:
           } else {
             gh release create $tag $assets --draft --generate-notes --verify-tag
           }
+          gh release delete-asset $tag "SHA256SUMS-Linux.txt" --yes
+          if ($LASTEXITCODE -ne 0) {
+            throw "Não foi possível remover o checksum Linux temporário."
+          }
+          gh release delete-asset $tag "QuantumScribe-Core-$version-Windows-x64.zip" --yes *> $null
           gh release edit $tag --draft=false --latest
