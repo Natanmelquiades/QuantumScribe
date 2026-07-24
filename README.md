@@ -97,7 +97,6 @@ VRAM e tempo de inicialização no primeiro ditado.
 | Forma | Para quem | O que baixar |
 |---|---|---|
 | **Instalador Windows** — recomendada | quem quer instalar e abrir como um programa normal | `QuantumScribe-Setup-<versão>-Windows-x64.exe` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
-| **Versão portátil** | desenvolvedores e testes sem instalação | `QuantumScribe-Core-<versão>-Windows-x64.zip` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
 | **Linux x64** | Ubuntu e distribuições compatíveis | `QuantumScribe-Core-<versão>-Linux-x64.tar.gz` na [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest) |
 | **Código-fonte — CPU** | desenvolvimento e contribuição | clone com Git ou [baixe o código em ZIP](https://github.com/Natanmelquiades/QuantumScribe/archive/refs/heads/main.zip) |
 | **Código-fonte — NVIDIA CUDA** | desenvolvimento com GPU NVIDIA compatível | o mesmo código-fonte, iniciado com o perfil CUDA |
@@ -136,17 +135,7 @@ O instalador:
 Modelos Whisper não são empacotados no instalador. Eles continuam sendo baixados sob
 demanda e armazenados em `%LOCALAPPDATA%\QuantumScribe`.
 
-### Opção 2 — versão portátil
-
-1. Abra a [release mais recente](https://github.com/Natanmelquiades/QuantumScribe/releases/latest).
-2. Em **Assets**, baixe `QuantumScribe-Core-<versão>-Windows-x64.zip`.
-3. Clique com o botão direito no ZIP e selecione **Extrair tudo**.
-4. Abra a pasta extraída e execute `QuantumScribe.exe`.
-
-Não execute o programa diretamente de dentro do ZIP e não mova somente o `.exe`: a
-pasta `_internal` contém bibliotecas necessárias para o aplicativo funcionar.
-
-### Opção 3 — Linux x64
+### Opção 2 — Linux x64
 
 1. Instale os utilitários do sistema: `python3-tk`, `portaudio19-dev`,
    `gir1.2-ayatanaappindicator3-0.1`, `xdotool`, `xclip`, `wl-clipboard` e
