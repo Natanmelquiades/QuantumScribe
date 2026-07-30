@@ -137,6 +137,28 @@ demanda e armazenados em `%LOCALAPPDATA%\QuantumScribe`.
 
 ### Opção 2 — Linux x64
 
+Em Ubuntu/Debian x64, a primeira instalação pode ser feita com um único comando:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Natanmelquiades/QuantumScribe/main/install_linux_latest.sh | bash
+```
+
+O instalador solicita `sudo` somente para instalar as dependências do sistema,
+baixa sempre a release final mais recente, valida o SHA-256, rejeita arquivos
+inseguros, instala somente para o usuário atual e inicia o aplicativo. Modelos,
+configurações e transcrições ficam fora da pasta do executável e são preservados.
+
+Em outras distribuições Linux x64, instale primeiro `curl`, `python3`, `xdotool`,
+`xclip`, `wl-clipboard`, AppIndicator e `desktop-file-utils` pelo gerenciador da
+distribuição. Depois execute:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Natanmelquiades/QuantumScribe/main/install_linux_latest.sh \
+  | QS_SKIP_SYSTEM_DEPENDENCIES=1 bash
+```
+
+Para instalar manualmente:
+
 1. Instale os utilitários do sistema: `python3-tk`, `portaudio19-dev`,
    `gir1.2-ayatanaappindicator3-0.1`, `xdotool`, `xclip`, `wl-clipboard` e
    `desktop-file-utils`.
