@@ -1,5 +1,5 @@
 -r requirements-cpu.txt
 pytest>=9.0,<10.0
 pytest-cov>=6.0,<8.0
-ruff>=0.15,<1.0
+ruff>=0.15.22,<1.0
 pip-audit>=2.10,<3.0
