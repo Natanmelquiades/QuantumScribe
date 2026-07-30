@@ -12,7 +12,7 @@ mkdir -p "$BIN_DIR" "$APPLICATIONS_DIR"
 
 if [ "${1:-}" = "--source" ]; then
     EXECUTABLE="$SCRIPT_DIR/run_linux.sh"
-    ICON="$SCRIPT_DIR/localwhisper/assets/icon.png"
+    ICON="$SCRIPT_DIR/localwhisper/assets/tray-icon.png"
     if [ ! -x "$EXECUTABLE" ]; then
         chmod +x "$EXECUTABLE"
     fi
@@ -27,7 +27,7 @@ elif [ -x "$SCRIPT_DIR/QuantumScribe/QuantumScribe" ]; then
     cp -a "$SCRIPT_DIR/QuantumScribe" "$APP_DIR"
     touch "$APP_DIR/.quantumscribe-install"
     EXECUTABLE="$APP_DIR/QuantumScribe"
-    ICON="$APP_DIR/_internal/localwhisper/assets/icon.png"
+    ICON="$APP_DIR/_internal/localwhisper/assets/tray-icon.png"
 else
     echo "Executável do QuantumScribe não encontrado ao lado deste instalador." >&2
     exit 1

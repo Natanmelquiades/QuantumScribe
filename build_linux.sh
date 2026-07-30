@@ -6,7 +6,7 @@ cd "$SCRIPT_DIR"
 
 if [ ! -x ".venv-linux/bin/python" ]; then
     echo "Criando ambiente .venv-linux..."
-    python3 -m venv .venv-linux
+    python3 -m venv --copies .venv-linux
 fi
 
 .venv-linux/bin/pip install -r requirements-linux.txt

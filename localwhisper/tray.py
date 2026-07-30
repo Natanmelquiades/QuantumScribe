@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import threading
 from pathlib import Path
+from types import MethodType
 from typing import Callable
 
 # O backend Xorg do pystray não implementa menus; no Ubuntu preferimos
@@ -26,17 +28,19 @@ from PIL import Image, ImageDraw
 
 def create_icon() -> Image.Image:
     """Carrega o asset oficial; o desenho legado é somente um fallback seguro."""
-    icon_path = Path(__file__).with_name("assets") / "icon.png"
+    asset_name = "tray-icon.png" if sys.platform.startswith("linux") else "icon.png"
+    icon_path = Path(__file__).with_name("assets") / asset_name
     try:
         with Image.open(icon_path) as official:
             return official.convert("RGBA").copy()
     except (OSError, ValueError):
         pass
 
-    # Fundo em preto profundo (10, 11, 13) e barras em laranja neon (255, 96, 0)
-    image = Image.new("RGBA", (64, 64), (10, 11, 13, 255))
+    # Fallback circular transparente para nunca expor um quadrado na bandeja.
+    image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     color = (255, 96, 0, 255)
+    draw.ellipse((5, 5, 59, 59), fill=(10, 11, 13, 210), outline=color, width=2)
     widths = [10, 22, 36, 22, 10]
     for index, height in enumerate(widths):
         x = 12 + index * 10
@@ -46,6 +50,36 @@ def create_icon() -> Image.Image:
             fill=color,
         )
     return image
+
+
+def _force_png_suffix_for_appindicator(icon: object) -> bool:
+    """Evita que o AppIndicator trate o PNG temporário como bitmap opaco."""
+    if icon.__class__.__module__ != "pystray._appindicator":
+        return False
+
+    def update_fs_icon(instance) -> None:
+        descriptor, path = tempfile.mkstemp(prefix="quantumscribe-tray-", suffix=".png")
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                instance.icon.save(stream, "PNG")
+        except Exception:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            raise
+        instance._icon_path = path
+        instance._icon_valid = True
+
+    try:
+        icon._update_fs_icon = MethodType(update_fs_icon, icon)
+    except (AttributeError, TypeError):
+        return False
+    return True
 
 
 class TrayIcon:
@@ -69,6 +103,7 @@ class TrayIcon:
                 pystray.MenuItem("Sair", on_exit),
             ),
         )
+        _force_png_suffix_for_appindicator(self.icon)
         self.thread: threading.Thread | None = None
         self.ready = threading.Event()
 

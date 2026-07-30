@@ -86,7 +86,7 @@ def set_clipboard_text(text: str) -> None:
 
 
 def type_into_window(target: WindowTarget, text: str) -> bool:
-    """Cola texto na janela em foco no Linux (via xdotool / ydotool / Ctrl+V)."""
+    """Restaura o foco capturado e cola o texto no Linux."""
     try:
         set_clipboard_text(text)
     except OSError:
@@ -95,16 +95,36 @@ def type_into_window(target: WindowTarget, text: str) -> bool:
 
     if shutil.which("xdotool"):
         try:
-            subprocess.run(["xdotool", "key", "--clearmods", "ctrl+v"], check=False, timeout=2)
-            return True
+            if target.window:
+                activated = subprocess.run(
+                    ["xdotool", "windowactivate", "--sync", str(target.window)],
+                    check=False,
+                    timeout=2,
+                )
+                if activated.returncode != 0:
+                    return False
+                time.sleep(0.05)
+            pasted = subprocess.run(
+                ["xdotool", "key", "--clearmodifiers", "ctrl+v"],
+                check=False,
+                timeout=2,
+            )
+            return pasted.returncode == 0
         except (subprocess.SubprocessError, OSError):
             pass
 
     if shutil.which("ydotool"):
         try:
-            # ydotool key 29:1 47:1 47:0 29:0 (Ctrl+V)
-            subprocess.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], check=False, timeout=2)
-            return True
+            # ydotool não consegue restaurar uma janela X11 específica com
+            # segurança. Ele é usado apenas quando não havia alvo capturado.
+            if target.window:
+                return False
+            pasted = subprocess.run(
+                ["ydotool", "key", "29:1", "47:1", "47:0", "29:0"],
+                check=False,
+                timeout=2,
+            )
+            return pasted.returncode == 0
         except (subprocess.SubprocessError, OSError):
             pass
 

@@ -4,19 +4,37 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [2.2.23] - 2026-07-30
+
 ### Adicionado
 - Botão `Verificar atualização` na tela Sobre, com consulta à release pública
   oficial, comparação de versão, download do instalador, validação SHA-256,
   instalação silenciosa após o fechamento e reabertura automática do aplicativo.
+- Atualização interna no Linux pelo pacote oficial da release, com validação
+  SHA-256, extração segura, migração da execução por código-fonte para o pacote
+  instalado por usuário e reabertura automática.
 
 ### Segurança
 - O atualizador aceita somente releases finais e assets oficiais do GitHub,
   impede downgrade e não altera modelos, componentes, configurações,
   transcrições ou dados locais.
+- O atualizador Linux rejeita caminhos absolutos, travessia de diretórios,
+  dispositivos, links inseguros e arquivos fora do layout oficial.
 
 ### Corrigido
 - O ambiente do workflow de testes volta a instalar as dependências visuais
   necessárias para importar e testar o HUD e as configurações.
+- A colagem automática no Linux volta a inserir a transcrição no cursor:
+  o alvo capturado é reativado e o `xdotool` usa a opção válida
+  `--clearmodifiers`, com verificação real do resultado.
+- O ícone no Linux usa um asset circular mais leve e transparente; o backend
+  AppIndicator mantém a extensão `.png` para preservar corretamente o canal alpha.
+- Scripts shell passam a usar finais de linha Unix e ambientes virtuais Linux
+  usam cópias reais do Python, inclusive em unidades NTFS.
+
+### Qualidade
+- Adicionados testes de regressão para colagem X11, transparência do ícone,
+  pacote correto por plataforma e agendamento seguro da atualização Linux.
 
 ## [2.2.11] - 2026-07-21
 

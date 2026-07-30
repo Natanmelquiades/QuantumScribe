@@ -25,6 +25,7 @@ class _FakeResponse(io.BytesIO):
 
 def _release(version: str, installer_size: int) -> bytes:
     installer_name = f"QuantumScribe-Setup-{version}-Windows-x64.exe"
+    linux_name = f"QuantumScribe-Core-{version}-Linux-x64.tar.gz"
     return json.dumps(
         {
             "tag_name": f"v{version}",
@@ -36,6 +37,11 @@ def _release(version: str, installer_size: int) -> bytes:
                     "name": installer_name,
                     "size": installer_size,
                     "browser_download_url": f"https://github.com/Natanmelquiades/QuantumScribe/releases/download/v{version}/{installer_name}",
+                },
+                {
+                    "name": linux_name,
+                    "size": installer_size,
+                    "browser_download_url": f"https://github.com/Natanmelquiades/QuantumScribe/releases/download/v{version}/{linux_name}",
                 },
                 {
                     "name": "SHA256SUMS.txt",
@@ -50,6 +56,7 @@ def _release(version: str, installer_size: int) -> bytes:
 def test_update_check_ignores_same_or_older_release(monkeypatch):
     payload = _release("2.2.11", 10 * 1024 * 1024)
     monkeypatch.setattr(updater, "_read_url", lambda *_args: payload)
+    monkeypatch.setattr(updater.sys, "platform", "win32")
 
     assert updater.check_for_update("2.2.11") is None
     assert updater.check_for_update("2.2.12") is None
@@ -58,6 +65,7 @@ def test_update_check_ignores_same_or_older_release(monkeypatch):
 def test_update_check_requires_exact_official_assets(monkeypatch):
     payload = _release("2.2.13", 10 * 1024 * 1024)
     monkeypatch.setattr(updater, "_read_url", lambda *_args: payload)
+    monkeypatch.setattr(updater.sys, "platform", "win32")
 
     info = updater.check_for_update("2.2.12")
 
@@ -70,9 +78,21 @@ def test_update_check_rejects_unofficial_asset_url(monkeypatch):
     payload = json.loads(_release("2.2.13", 10 * 1024 * 1024))
     payload["assets"][0]["browser_download_url"] = "https://example.invalid/setup.exe"
     monkeypatch.setattr(updater, "_read_url", lambda *_args: json.dumps(payload).encode())
+    monkeypatch.setattr(updater.sys, "platform", "win32")
 
     with pytest.raises(updater.UpdateError, match="não autorizado"):
         updater.check_for_update("2.2.12")
+
+
+def test_update_check_selects_official_linux_package(monkeypatch):
+    payload = _release("2.2.13", 10 * 1024 * 1024)
+    monkeypatch.setattr(updater, "_read_url", lambda *_args: payload)
+    monkeypatch.setattr(updater.sys, "platform", "linux")
+
+    info = updater.check_for_update("2.2.12")
+
+    assert info is not None
+    assert info.installer.name == "QuantumScribe-Core-2.2.13-Linux-x64.tar.gz"
 
 
 def test_download_rejects_modified_installer(tmp_path, monkeypatch):
@@ -207,3 +227,33 @@ def test_schedule_rejects_unexpected_installer_name(tmp_path, monkeypatch):
 
     with pytest.raises(updater.UpdateError, match="nome do instalador"):
         updater.schedule_update_after_exit(installer, digest, 456)
+
+
+def test_schedule_linux_revalidates_extracts_safely_and_restarts(tmp_path, monkeypatch):
+    package = tmp_path / "updates" / "QuantumScribe-Core-2.2.22-Linux-x64.tar.gz"
+    package.parent.mkdir()
+    package.write_bytes(b"pacote linux verificado")
+    digest = hashlib.sha256(package.read_bytes()).hexdigest()
+    captured = {}
+
+    monkeypatch.setattr(updater.sys, "platform", "linux")
+    monkeypatch.setattr(updater.shutil, "which", lambda name: "/usr/bin/python3" if name == "python3" else None)
+    monkeypatch.setattr(
+        updater.subprocess,
+        "Popen",
+        lambda args, **kwargs: captured.update(args=args, kwargs=kwargs),
+    )
+
+    updater.schedule_update_after_exit(package, digest, 789)
+
+    helper_script = package.parent / "apply-update.py"
+    script = helper_script.read_text(encoding="utf-8")
+    assert "parent_pid = 789" in script
+    assert "filter=\"data\"" in script
+    assert "O pacote contém um caminho inseguro." in script
+    assert "install_linux_shortcut.sh" in script
+    assert digest in script
+    assert "start_new_session=True" in script
+    assert captured["args"] == ["/usr/bin/python3", str(helper_script)]
+    assert captured["kwargs"]["start_new_session"] is True
+    assert (package.parent / "update-status.txt").read_text(encoding="utf-8") == "scheduled"

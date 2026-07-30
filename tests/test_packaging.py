@@ -26,6 +26,7 @@ def test_windows_packaging_sources_exist():
 
 def test_linux_packaging_sources_exist():
     expected = (
+        ROOT / "localwhisper" / "assets" / "tray-icon.png",
         ROOT / "QuantumScribe-Linux.spec",
         ROOT / "requirements-linux.txt",
         ROOT / "install_linux.sh",
@@ -42,6 +43,7 @@ def test_linux_packaging_sources_exist():
     assert build_script.index('pip install -r requirements-linux.txt') > build_script.index('fi\n')
     assert "'PIL._tkinter_finder'" in spec
     assert "'gi.repository.AyatanaAppIndicator3'" in spec
+    assert "tray-icon.png" in spec
     assert "install_linux_shortcut.sh" in release
 
 
@@ -103,6 +105,8 @@ def test_about_page_exposes_safe_application_updater():
     assert "draft" in updater and "prerelease" in updater
     assert "Get-Process" in updater and "Start-Sleep" in updater
     assert "QuantumScribe-Setup-" in updater
+    assert "QuantumScribe-Core-" in updater
+    assert 'filter="data"' in updater
 
 
 def test_nsis_build_uses_utf8_input():

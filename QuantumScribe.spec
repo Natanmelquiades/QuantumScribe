@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('localwhisper/assets/icon.png', 'localwhisper/assets')]
+datas = [
+    ('localwhisper/assets/icon.png', 'localwhisper/assets'),
+    ('localwhisper/assets/tray-icon.png', 'localwhisper/assets'),
+]
 binaries = []
 hiddenimports = ['onnxruntime', 'scipy', 'noisereduce', 'huggingface_hub']
 tmp_ret = collect_all('faster_whisper')
