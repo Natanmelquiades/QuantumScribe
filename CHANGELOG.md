@@ -4,6 +4,20 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [2.2.24] - 2026-07-30
+
+### Adicionado
+- Instalador oficial de uma linha para Ubuntu/Debian x64, com descoberta
+  automática da release final mais recente, instalação das dependências,
+  validação SHA-256, extração segura, registro de atalhos e inicialização do app.
+- Modo portátil do instalador para outras distribuições, permitindo que as
+  dependências sejam preparadas pelo gerenciador de pacotes local.
+
+### Segurança
+- O instalador de primeira execução aceita somente assets da release oficial,
+  valida tag, nomes e URLs, bloqueia travessia de diretórios, dispositivos e links
+  inseguros e preserva a pasta separada de dados do usuário.
+
 ## [2.2.23] - 2026-07-30
 
 ### Adicionado

@@ -30,6 +30,7 @@ def test_linux_packaging_sources_exist():
         ROOT / "QuantumScribe-Linux.spec",
         ROOT / "requirements-linux.txt",
         ROOT / "install_linux.sh",
+        ROOT / "install_linux_latest.sh",
         ROOT / "install_linux_shortcut.sh",
         ROOT / "run_linux.sh",
         ROOT / "build_linux.sh",
@@ -45,6 +46,23 @@ def test_linux_packaging_sources_exist():
     assert "'gi.repository.AyatanaAppIndicator3'" in spec
     assert "tray-icon.png" in spec
     assert "install_linux_shortcut.sh" in release
+
+
+def test_one_command_linux_installer_is_safe_and_documented():
+    installer = (ROOT / "install_linux_latest.sh").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "releases/latest" in installer
+    assert "SHA256SUMS.txt" in installer
+    assert "sha256sum" in installer
+    assert 'filter="data"' in installer
+    assert "install_linux_shortcut.sh" in installer
+    assert "quantumscribe-install.XXXXXX" in installer
+    assert "QS_SKIP_SYSTEM_DEPENDENCIES" in installer
+    assert "QS_NO_START" in installer
+    assert "QS_VERIFY_ONLY" in installer
+    assert "curl -fsSL https://raw.githubusercontent.com/" in readme
+    assert "install_linux_latest.sh | bash" in readme
 
 
 def test_core_explicitly_excludes_heavy_optional_runtimes():
