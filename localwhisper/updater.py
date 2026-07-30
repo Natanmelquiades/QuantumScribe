@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -28,7 +29,7 @@ _ALLOWED_HOSTS = {
 }
 _MAX_RELEASE_METADATA_BYTES = 1024 * 1024
 _MAX_CHECKSUM_BYTES = 1024 * 1024
-_MAX_INSTALLER_BYTES = 500 * 1024 * 1024
+_MAX_PACKAGE_BYTES = 500 * 1024 * 1024
 _VERSION_PATTERN = re.compile(r"^(?:v)?(\d+)\.(\d+)\.(\d+)$")
 
 
@@ -131,11 +132,16 @@ def check_for_update(current_version: str = __version__) -> UpdateInfo | None:
     if latest_tuple <= parse_version(current_version):
         return None
     version = ".".join(str(part) for part in latest_tuple)
-    installer_name = f"QuantumScribe-Setup-{version}-Windows-x64.exe"
+    if sys.platform == "win32":
+        installer_name = f"QuantumScribe-Setup-{version}-Windows-x64.exe"
+    elif sys.platform.startswith("linux"):
+        installer_name = f"QuantumScribe-Core-{version}-Linux-x64.tar.gz"
+    else:
+        raise UpdateError("A atualização automática não está disponível neste sistema.")
     installer = _asset_from_release(payload.get("assets"), installer_name, version)
     checksums = _asset_from_release(payload.get("assets"), "SHA256SUMS.txt", version)
-    if not (1024 * 1024 <= installer.size <= _MAX_INSTALLER_BYTES):
-        raise UpdateError("O tamanho declarado do instalador é inválido.")
+    if not (1024 * 1024 <= installer.size <= _MAX_PACKAGE_BYTES):
+        raise UpdateError("O tamanho declarado do pacote de atualização é inválido.")
     if not (1 <= checksums.size <= _MAX_CHECKSUM_BYTES):
         raise UpdateError("O tamanho declarado dos hashes é inválido.")
 
@@ -183,16 +189,16 @@ def _download_installer(
         with urllib.request.urlopen(_request(asset.url), timeout=30) as response:
             _validate_url(response.geturl())
             declared = response.headers.get("Content-Length")
-            if declared and int(declared) > _MAX_INSTALLER_BYTES:
-                raise UpdateError("O instalador excede o tamanho máximo permitido.")
+            if declared and int(declared) > _MAX_PACKAGE_BYTES:
+                raise UpdateError("O pacote excede o tamanho máximo permitido.")
             with destination.open("wb") as output:
                 while True:
                     chunk = response.read(1024 * 1024)
                     if not chunk:
                         break
                     received += len(chunk)
-                    if received > _MAX_INSTALLER_BYTES:
-                        raise UpdateError("O instalador excede o tamanho máximo permitido.")
+                    if received > _MAX_PACKAGE_BYTES:
+                        raise UpdateError("O pacote excede o tamanho máximo permitido.")
                     output.write(chunk)
                     if on_progress:
                         on_progress(received, asset.size)
@@ -233,10 +239,23 @@ def download_update(
 
 
 def schedule_update_after_exit(installer: Path, expected_hash: str, parent_pid: int) -> None:
-    """Agenda instalação silenciosa somente depois que o processo atual encerrar."""
+    """Agenda a instalação verificada adequada ao sistema operacional."""
+    if sys.platform == "win32":
+        _schedule_windows_update_after_exit(installer, expected_hash, parent_pid)
+        return
+    if sys.platform.startswith("linux"):
+        _schedule_linux_update_after_exit(installer, expected_hash, parent_pid)
+        return
+    raise UpdateError("A atualização automática não está disponível neste sistema.")
+
+
+def _schedule_windows_update_after_exit(
+    installer: Path,
+    expected_hash: str,
+    parent_pid: int,
+) -> None:
+    """Agenda o instalador Windows somente depois que o processo atual encerrar."""
     installer = installer.resolve()
-    if sys.platform != "win32":
-        raise UpdateError("A atualização automática está disponível somente no Windows.")
     if not installer.is_file() or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
         raise UpdateError("O instalador preparado para atualização é inválido.")
     verify_sha256(installer, expected_hash)
@@ -335,3 +354,144 @@ exit $result
             encoding="utf-8",
         )
         raise UpdateError("Não foi possível iniciar o atualizador do Windows.") from error
+
+
+def _schedule_linux_update_after_exit(
+    package: Path,
+    expected_hash: str,
+    parent_pid: int,
+) -> None:
+    """Agenda a troca atômica pelo pacote Linux oficial após encerrar o app."""
+    package = package.resolve()
+    if not package.is_file() or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_hash):
+        raise UpdateError("O pacote preparado para atualização é inválido.")
+    package_match = re.fullmatch(
+        r"QuantumScribe-Core-(\d+\.\d+\.\d+)-Linux-x64\.tar\.gz",
+        package.name,
+    )
+    if not package_match:
+        raise UpdateError("O nome do pacote preparado para atualização é inválido.")
+    verify_sha256(package, expected_hash)
+
+    python = shutil.which("python3")
+    if not python:
+        raise UpdateError("O Python do sistema, necessário para aplicar a atualização, não foi encontrado.")
+
+    update_dir = package.parent
+    status_file = update_dir / "update-status.txt"
+    helper_script = update_dir / "apply-update.py"
+    staging_dir = update_dir / "staging"
+    launcher = Path.home() / ".local" / "bin" / "quantumscribe"
+    expected_version = package_match.group(1)
+
+    script = f"""
+import hashlib
+import os
+from pathlib import Path, PurePosixPath
+import shutil
+import subprocess
+import tarfile
+import time
+
+package = Path({str(package)!r})
+expected_hash = {expected_hash.lower()!r}
+expected_version = {expected_version!r}
+parent_pid = {int(parent_pid)}
+status_file = Path({str(status_file)!r})
+staging_dir = Path({str(staging_dir)!r})
+launcher = Path({str(launcher)!r})
+
+
+def status(message):
+    status_file.write_text(message, encoding="utf-8")
+
+
+def process_exists(pid):
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+try:
+    status("waiting-for-app-exit")
+    deadline = time.monotonic() + 60
+    while process_exists(parent_pid) and time.monotonic() < deadline:
+        time.sleep(0.25)
+    if process_exists(parent_pid):
+        raise RuntimeError("O aplicativo não encerrou a tempo.")
+
+    status("verifying")
+    digest = hashlib.sha256()
+    with package.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest().lower() != expected_hash:
+        raise RuntimeError("SHA-256 do pacote não corresponde à release.")
+
+    shutil.rmtree(staging_dir, ignore_errors=True)
+    staging_dir.mkdir(parents=True)
+    status("extracting")
+    with tarfile.open(package, "r:gz") as archive:
+        members = archive.getmembers()
+        if not members:
+            raise RuntimeError("O pacote Linux está vazio.")
+        for member in members:
+            path = PurePosixPath(member.name)
+            if path.is_absolute() or ".." in path.parts:
+                raise RuntimeError("O pacote contém um caminho inseguro.")
+            if not path.parts or path.parts[0] not in {{"QuantumScribe", "install_linux_shortcut.sh"}}:
+                raise RuntimeError("O pacote contém arquivos fora do layout oficial.")
+            if member.isdev():
+                raise RuntimeError("O pacote contém um dispositivo não permitido.")
+            if member.issym() or member.islnk():
+                link = PurePosixPath(member.linkname)
+                if link.is_absolute() or ".." in link.parts:
+                    raise RuntimeError("O pacote contém um link inseguro.")
+        archive.extractall(staging_dir, members=members, filter="data")
+
+    executable = staging_dir / "QuantumScribe" / "QuantumScribe"
+    installer = staging_dir / "install_linux_shortcut.sh"
+    if not executable.is_file() or not installer.is_file():
+        raise RuntimeError("O pacote não contém o aplicativo Linux esperado.")
+    executable.chmod(executable.stat().st_mode | 0o111)
+    installer.chmod(installer.stat().st_mode | 0o111)
+
+    status("installing")
+    subprocess.run(["bash", str(installer)], cwd=staging_dir, check=True)
+    if not launcher.is_file():
+        raise RuntimeError("O launcher do QuantumScribe não foi instalado.")
+
+    status("success:" + expected_version)
+    subprocess.Popen(
+        [str(launcher)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+except Exception as error:
+    status("error: " + str(error))
+    raise
+finally:
+    shutil.rmtree(staging_dir, ignore_errors=True)
+""".strip()
+    helper_script.write_text(script, encoding="utf-8")
+    status_file.write_text("scheduled", encoding="utf-8")
+    try:
+        subprocess.Popen(
+            [python, str(helper_script)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError as error:
+        status_file.write_text(
+            "Não foi possível iniciar o atualizador do Linux.",
+            encoding="utf-8",
+        )
+        raise UpdateError("Não foi possível iniciar o atualizador do Linux.") from error

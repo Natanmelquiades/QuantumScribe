@@ -8,6 +8,8 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.json text eol=lf
+*.sh text eol=lf
+*.spec text eol=lf
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.png binary

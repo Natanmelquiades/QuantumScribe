@@ -151,6 +151,11 @@ No Ubuntu/GNOME, o menu da bandeja usa AppIndicator; clique no ícone para abrir
 as opções. Se AppIndicator não estiver disponível, o clique abre diretamente as
 configurações e nunca inicia uma gravação acidental.
 
+Depois de instalar uma release Linux, futuras versões podem ser aplicadas em
+**Ajustes > Sobre > Verificar atualização**. O aplicativo baixa o pacote Linux
+oficial, valida o SHA-256, preserva modelos e dados locais, instala após o
+fechamento e abre novamente.
+
 ### Opção 4 — código-fonte para desenvolvimento
 
 #### Com Git — perfil CPU recomendado

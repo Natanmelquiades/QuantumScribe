@@ -15,7 +15,7 @@ fi
 
 echo "=== Criando ambiente virtual Python ==="
 if [ ! -x ".venv-linux/bin/python" ]; then
-    python3 -m venv .venv-linux
+    python3 -m venv --copies .venv-linux
 fi
 
 echo "=== Instalando dependências Python ==="

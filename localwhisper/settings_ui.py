@@ -2640,7 +2640,7 @@ def _handle_update_check(self: SettingsWindow, info) -> None:
     confirmed = messagebox.askyesno(
         "Atualização disponível",
         f"A versão {info.version} está disponível.\n\n"
-        f"O Quantum Scribe baixará o instalador oficial ({size_mb:.0f} MB), validará a integridade, "
+        f"O Quantum Scribe baixará o pacote oficial ({size_mb:.0f} MB), validará a integridade, "
         "fechará o aplicativo, instalará a atualização e abrirá novamente.\n\n"
         "Modelos, configurações e transcrições não serão alterados.\n\nAtualizar agora?",
         parent=self,
@@ -2672,10 +2672,10 @@ def _handle_update_check(self: SettingsWindow, info) -> None:
 
 
 def _apply_downloaded_update(self: SettingsWindow, installer: Path, expected_hash: str) -> None:
-    self._set_update_ui("Instalador verificado. Preparando a atualização…", busy=True)
+    self._set_update_ui("Pacote verificado. Preparando a atualização…", busy=True)
     try:
         if self.on_install_update_callback is None:
-            raise RuntimeError("O aplicativo não disponibilizou o instalador automático.")
+            raise RuntimeError("O aplicativo não disponibilizou a atualização automática.")
         self.on_install_update_callback(installer, expected_hash)
     except Exception as error:
         self._finish_update_error(error)
