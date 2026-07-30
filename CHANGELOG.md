@@ -4,7 +4,7 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
-## [2.2.22] - 2026-07-30
+## [2.2.23] - 2026-07-30
 
 ### Adicionado
 - Botão `Verificar atualização` na tela Sobre, com consulta à release pública

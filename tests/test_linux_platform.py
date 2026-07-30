@@ -1,3 +1,10 @@
+import sys
+
+import pytest
+
+if not sys.platform.startswith("linux"):
+    pytest.skip("Testes específicos da integração Linux", allow_module_level=True)
+
 from localwhisper.platform.linux import windows_api
 from localwhisper.platform.linux.hotkey import GlobalHotkey, _parse_hotkey
 
