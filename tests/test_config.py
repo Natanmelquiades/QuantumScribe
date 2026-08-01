@@ -7,6 +7,7 @@ from localwhisper.config import AppConfig, is_model_downloaded, load_config, mod
 def temp_appdata(tmp_path, monkeypatch):
     # Redireciona o LOCALAPPDATA para uma pasta temporária isolada
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     return tmp_path
 
 def test_load_default_config(temp_appdata):

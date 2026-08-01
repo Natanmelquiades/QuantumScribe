@@ -54,6 +54,10 @@ class GlobalHotkey:
         self._active = False
         self._release_pending = False
         self._state_lock = threading.Lock()
+        self._listener_lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._watchdog_thread: threading.Thread | None = None
+        self._keyboard = None
 
     def _press_token(self, token: str | None) -> None:
         if token is None:
@@ -65,6 +69,7 @@ class GlobalHotkey:
                 self._active = True
                 should_notify = True
         if should_notify and self.on_press:
+            print(f"[Hotkey Linux] Atalho '{self.hotkey}' pressionado.")
             self.on_press()
 
     def _release_token(self, token: str | None) -> None:
@@ -80,7 +85,63 @@ class GlobalHotkey:
                 self._release_pending = False
                 should_notify = True
         if should_notify and self.on_release:
+            print(f"[Hotkey Linux] Atalho '{self.hotkey}' acionado.")
             self.on_release()
+
+    def _report_callback_error(self, phase: str, error: Exception) -> None:
+        # Uma exceção que escapa de um callback do pynput encerra a thread do
+        # listener silenciosamente. Isole a UI para o Ctrl+Espaço continuar vivo.
+        self.error = f"Falha no callback de {phase} do atalho '{self.hotkey}': {error}"
+        print(f"[Hotkey Linux] {self.error}")
+
+    def _on_press_event(self, key) -> None:
+        try:
+            self._press_token(self._event_token(key, self._keyboard))
+        except Exception as error:
+            self._report_callback_error("pressionamento", error)
+
+    def _on_release_event(self, key) -> None:
+        try:
+            self._release_token(self._event_token(key, self._keyboard))
+        except Exception as error:
+            self._report_callback_error("liberação", error)
+
+    def _start_listener(self) -> None:
+        with self._listener_lock:
+            if self._stop_event.is_set():
+                return
+            listener = self._keyboard.Listener(
+                on_press=self._on_press_event,
+                on_release=self._on_release_event,
+            )
+            listener.start()
+            self.listener = listener
+            print(f"[Hotkey Linux] Listener de '{self.hotkey}' registrado.")
+
+    def _ensure_listener_alive(self) -> bool:
+        """Recria o listener se o backend do desktop encerrar sua thread."""
+        with self._listener_lock:
+            listener = self.listener
+            healthy = bool(listener and getattr(listener, "running", False))
+        if healthy or self._stop_event.is_set():
+            return healthy
+
+        with self._state_lock:
+            self._pressed_keys.clear()
+            self._active = False
+            self._release_pending = False
+        try:
+            self._start_listener()
+            print(f"[Hotkey Linux] Listener de '{self.hotkey}' reiniciado.")
+            return True
+        except Exception as error:
+            self.error = f"Não foi possível reiniciar o atalho '{self.hotkey}': {error}"
+            print(f"[Hotkey Linux] {self.error}")
+            return False
+
+    def _watch_listener(self) -> None:
+        while not self._stop_event.wait(1.0):
+            self._ensure_listener_alive()
 
     @staticmethod
     def _event_token(key, keyboard) -> str | None:
@@ -107,14 +168,19 @@ class GlobalHotkey:
         return aliases.get(key)
 
     def start(self, readiness_timeout: float = 0.5) -> None:
+        del readiness_timeout  # mantido por compatibilidade com o backend Windows
         try:
             from pynput import keyboard
 
-            self.listener = keyboard.Listener(
-                on_press=lambda key: self._press_token(self._event_token(key, keyboard)),
-                on_release=lambda key: self._release_token(self._event_token(key, keyboard)),
+            self._keyboard = keyboard
+            self._stop_event.clear()
+            self._start_listener()
+            self._watchdog_thread = threading.Thread(
+                target=self._watch_listener,
+                name=f"hotkey-watchdog-{self.hotkey}",
+                daemon=True,
             )
-            self.listener.start()
+            self._watchdog_thread.start()
             self.ready.set()
         except Exception as err:
             self.error = f"Não foi possível registrar o atalho '{self.hotkey}': {err}"
@@ -122,12 +188,19 @@ class GlobalHotkey:
             raise RuntimeError(self.error) from err
 
     def stop(self) -> None:
-        if self.listener:
+        self._stop_event.set()
+        with self._listener_lock:
+            listener = self.listener
+            self.listener = None
+        if listener:
             try:
-                self.listener.stop()
+                listener.stop()
             except Exception:
                 pass
-            self.listener = None
+        watchdog = self._watchdog_thread
+        if watchdog and watchdog is not threading.current_thread():
+            watchdog.join(timeout=1.5)
+        self._watchdog_thread = None
         with self._state_lock:
             self._pressed_keys.clear()
             self._active = False
@@ -153,6 +226,7 @@ class EscapeHotkey:
         self._press_time: float | None = None
         self._hold_timer: threading.Timer | None = None
         self._state_lock = threading.Lock()
+        self.error: str | None = None
 
     def _confirm_hold(self, session_id: int | None) -> None:
         with self._state_lock:
@@ -162,6 +236,7 @@ class EscapeHotkey:
             self.on_hold(session_id)
 
     def register(self, session_id: int | None = None) -> None:
+        self.unregister(wait=False)
         self._session_id = session_id
         try:
             from pynput import keyboard
@@ -177,7 +252,11 @@ class EscapeHotkey:
                         self._hold_timer.daemon = True
                         self._hold_timer.start()
                     if self.on_press:
-                        self.on_press(session)
+                        try:
+                            self.on_press(session)
+                        except Exception as error:
+                            self.error = f"Falha no callback de Esc pressionado: {error}"
+                            print(f"[Hotkey Linux] {self.error}")
 
             def on_release_key(key):
                 if key == keyboard.Key.esc:
@@ -191,12 +270,17 @@ class EscapeHotkey:
                     if timer:
                         timer.cancel()
                     if self.on_release:
-                        self.on_release(session)
+                        try:
+                            self.on_release(session)
+                        except Exception as error:
+                            self.error = f"Falha no callback de Esc liberado: {error}"
+                            print(f"[Hotkey Linux] {self.error}")
 
             self.listener = keyboard.Listener(on_press=on_press_key, on_release=on_release_key)
             self.listener.start()
-        except Exception:
-            pass
+        except Exception as error:
+            self.error = f"Não foi possível registrar Esc: {error}"
+            print(f"[Hotkey Linux] {self.error}")
 
     def unregister(self, wait: bool = True) -> None:
         with self._state_lock:
@@ -206,9 +290,12 @@ class EscapeHotkey:
         if timer:
             timer.cancel()
         if self.listener:
+            listener = self.listener
+            self.listener = None
             try:
-                self.listener.stop()
+                listener.stop()
+                if wait and listener is not threading.current_thread():
+                    listener.join(timeout=1.0)
             except Exception:
                 pass
-            self.listener = None
         self._session_id = None

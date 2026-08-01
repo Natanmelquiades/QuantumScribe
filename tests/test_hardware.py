@@ -46,7 +46,7 @@ def test_cuda_setup_keeps_windows_dll_handles_alive(tmp_path, monkeypatch):
 
     monkeypatch.setattr(hardware.sys, "platform", "win32")
     monkeypatch.setattr(hardware.sys, "path", [str(tmp_path)])
-    monkeypatch.setattr(hardware.os, "add_dll_directory", lambda path: handle)
+    monkeypatch.setattr(hardware.os, "add_dll_directory", lambda path: handle, raising=False)
     hardware._CUDA_DLL_HANDLES.clear()
     hardware._CUDA_DLL_DIRS.clear()
 
@@ -54,3 +54,23 @@ def test_cuda_setup_keeps_windows_dll_handles_alive(tmp_path, monkeypatch):
 
     assert str(nvidia_bin.resolve()) in registered
     assert handle in hardware._CUDA_DLL_HANDLES
+
+
+def test_linux_cuda_validation_loads_cublas_and_cudnn(monkeypatch):
+    loaded: list[tuple[str, int]] = []
+
+    monkeypatch.setattr(hardware.sys, "platform", "linux")
+    monkeypatch.setattr(
+        hardware.ctypes,
+        "CDLL",
+        lambda name, mode: loaded.append((name, mode)) or object(),
+    )
+    hardware._CUDA_DLL_HANDLES.clear()
+
+    hardware._load_required_cuda_libraries()
+
+    assert loaded == [
+        ("libcublas.so.12", hardware.ctypes.RTLD_GLOBAL),
+        ("libcudnn.so.9", hardware.ctypes.RTLD_GLOBAL),
+    ]
+    assert len(hardware._CUDA_DLL_HANDLES) == 2

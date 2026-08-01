@@ -1,4 +1,7 @@
+import sys
 from types import SimpleNamespace
+
+import pytest
 
 from localwhisper.app import ESC_HOLD_SECONDS, QuantumScribeApp
 from localwhisper.hotkey import EscapeHotkey
@@ -12,6 +15,7 @@ class _FakeUser32:
         return 0x8000 if next(self._pressed_states, False) else 0
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Exercita o polling GetAsyncKeyState do Windows")
 def test_escape_hold_confirms_only_after_configured_duration(monkeypatch):
     events: list[tuple[str, int | None]] = []
     hotkey = EscapeHotkey(
@@ -28,6 +32,7 @@ def test_escape_hold_confirms_only_after_configured_duration(monkeypatch):
     assert events == [("confirmed", 42), ("released", 42)]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Exercita o polling GetAsyncKeyState do Windows")
 def test_escape_tap_releases_without_confirmation(monkeypatch):
     events: list[tuple[str, int | None]] = []
     hotkey = EscapeHotkey(

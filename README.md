@@ -191,6 +191,26 @@ cd QuantumScribe
 Na primeira execução, o script cria `.venv`, instala o perfil CPU e inicia o app. Nas
 execuções seguintes, ele abre diretamente sem reinstalar tudo.
 
+#### Ubuntu/Linux — execução direta do código
+
+Na primeira execução dentro da pasta do projeto:
+
+```bash
+./install_linux.sh
+```
+
+Depois disso, abra o código diretamente com:
+
+```bash
+./run_linux.sh
+```
+
+O arquivo `run_linux.sh` é o equivalente Linux do `Iniciar.bat`: ele executa
+`.venv-linux/bin/python main.py`, sem compilar e sem substituir a instalação pronta.
+O instalador do ambiente também cria no menu a entrada separada
+**QuantumScribe (Código)**. Para recriar apenas essa entrada, execute
+`./install_linux_source_shortcut.sh`.
+
 #### Sem Git — código-fonte em ZIP
 
 1. [Baixe o código-fonte da branch `main`](https://github.com/Natanmelquiades/QuantumScribe/archive/refs/heads/main.zip).

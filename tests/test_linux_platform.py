@@ -49,6 +49,49 @@ def test_linux_hotkey_does_not_repeat_while_chord_is_held():
     assert events == ["press"]
 
 
+def test_linux_hotkey_callback_error_does_not_kill_event_dispatch(monkeypatch):
+    calls: list[str] = []
+
+    def broken_callback():
+        calls.append("called")
+        raise RuntimeError("UI encerrada")
+
+    hotkey = GlobalHotkey("Ctrl+Space", on_release=broken_callback)
+    monkeypatch.setattr(hotkey, "_event_token", lambda key, keyboard: key)
+
+    hotkey._press_token("ctrl")
+    hotkey._press_token("space")
+    hotkey._on_release_event("space")
+    hotkey._on_release_event("ctrl")
+
+    assert calls == ["called"]
+    assert hotkey.error == "Falha no callback de liberação do atalho 'Ctrl+Space': UI encerrada"
+
+
+def test_linux_hotkey_restarts_listener_after_backend_thread_stops():
+    listeners = []
+
+    class FakeListener:
+        def __init__(self, **_callbacks):
+            self.running = False
+            listeners.append(self)
+
+        def start(self):
+            self.running = True
+
+    class FakeKeyboard:
+        Listener = FakeListener
+
+    hotkey = GlobalHotkey("Ctrl+Space")
+    hotkey._keyboard = FakeKeyboard
+    hotkey._start_listener()
+    listeners[0].running = False
+
+    assert hotkey._ensure_listener_alive() is True
+    assert len(listeners) == 2
+    assert hotkey.listener is listeners[1]
+
+
 def test_linux_autopaste_restores_captured_window_and_uses_valid_xdotool_option(monkeypatch):
     calls: list[list[str]] = []
     clipboard: list[str] = []

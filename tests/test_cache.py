@@ -6,6 +6,7 @@ from localwhisper.cache import NormalizedTextCache
 @pytest.fixture
 def temp_appdata(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     return tmp_path
 
 def test_cache_normalizes_punctuation(temp_appdata):

@@ -5,6 +5,7 @@ from localwhisper.diary import diary_dir, search_entries
 
 def test_search_entries_finds_text_without_accent_or_case(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     path = diary_dir() / "2026-07-20.md"
     path.write_text(
         "# 2026-07-20\n\n## 09:30\n\nReunião sobre oração e café.\n\n"
@@ -22,6 +23,7 @@ def test_search_entries_finds_text_without_accent_or_case(tmp_path, monkeypatch)
 
 def test_search_entries_respects_date_range(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     root = diary_dir()
     (root / "2026-07-19.md").write_text("## 10:00\n\nTermo comum\n", encoding="utf-8")
     (root / "2026-07-20.md").write_text("## 11:00\n\nTermo comum novo\n", encoding="utf-8")

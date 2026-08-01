@@ -65,6 +65,14 @@ def setup_cuda_dlls() -> tuple[str, ...]:
 
 def _load_required_cuda_libraries() -> None:
     """Antecipa o carregamento que o CTranslate2 normalmente faz só no decode."""
+    if sys.platform.startswith("linux"):
+        # No Linux, get_cuda_device_count() confirma apenas que o driver enxerga
+        # a GPU. O CTranslate2 ainda precisa de cuBLAS e cuDNN no carregador
+        # dinâmico; sem esta validação a falha aparecia somente depois de gravar.
+        _CUDA_DLL_HANDLES.append(ctypes.CDLL("libcublas.so.12", mode=ctypes.RTLD_GLOBAL))
+        _CUDA_DLL_HANDLES.append(ctypes.CDLL("libcudnn.so.9", mode=ctypes.RTLD_GLOBAL))
+        return
+
     if sys.platform != "win32":
         return
 

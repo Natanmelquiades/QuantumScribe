@@ -23,7 +23,7 @@ echo "=== Instalando dependências Python ==="
 .venv-linux/bin/pip install -r requirements-linux.txt
 
 echo "=== Registrando aplicativo e atalho ==="
-bash ./install_linux_shortcut.sh --source
+bash ./install_linux_source_shortcut.sh
 
 echo "=== Instalação concluída com sucesso! ==="
-echo "Abra o QuantumScribe pelo menu de aplicativos ou pelo atalho da área de trabalho."
+echo "Abra 'QuantumScribe (Código)' pelo menu de aplicativos ou execute ./run_linux.sh."
