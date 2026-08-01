@@ -1,3 +1,3 @@
 """Quantum Scribe — desktop dictation and second-brain app."""
 
-__version__ = "2.2.25"
+__version__ = "2.2.26"

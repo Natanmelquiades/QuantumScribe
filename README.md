@@ -205,6 +205,16 @@ Depois disso, abra o código diretamente com:
 ./run_linux.sh
 ```
 
+O comando inicia o aplicativo em segundo plano e libera o terminal. Para acompanhar
+registro de atalhos, hardware e transcrições enquanto usa o programa:
+
+```bash
+./run_linux.sh --logs
+```
+
+Nesse modo, `Ctrl+C` fecha somente a visualização dos logs; o aplicativo continua
+funcionando. Use `./run_linux.sh --foreground` apenas para depuração ligada ao terminal.
+
 O arquivo `run_linux.sh` é o equivalente Linux do `Iniciar.bat`: ele executa
 `.venv-linux/bin/python main.py`, sem compilar e sem substituir a instalação pronta.
 O instalador do ambiente também cria no menu a entrada separada
