@@ -1,6 +1,6 @@
 import numpy as np
 
-from localwhisper.stream_transcriber import SAMPLE_RATE, VAD_FRAME_SAMPLES, _SileroVAD
+from localwhisper.stream_transcriber import SAMPLE_RATE, VAD_FRAME_SAMPLES, StreamTranscriber, _SileroVAD
 
 
 class _FakeSession:
@@ -47,3 +47,32 @@ def test_silero_rejects_wrong_frame_size():
         assert "512" in str(error)
     else:
         raise AssertionError("frame inválido deveria ser rejeitado")
+
+
+def test_cancelled_stream_discards_a_late_chunk_callback():
+    delivered: list[str] = []
+    stream = StreamTranscriber(
+        config=object(),
+        on_chunk_text=delivered.append,
+        on_status=lambda _status: None,
+    )
+    stream._cancel_requested.set()
+
+    stream._do_transcribe(np.zeros(VAD_FRAME_SAMPLES, dtype=np.int16), "", 0)
+
+    assert delivered == []
+    assert stream.accumulated_text_preview == ""
+
+
+def test_cancel_before_start_never_reopens_stream_capture():
+    stream = StreamTranscriber(
+        config=object(),
+        on_chunk_text=lambda _text: None,
+        on_status=lambda _status: None,
+    )
+    stream.cancel()
+
+    stream.start(object())
+
+    assert stream._running is False
+    assert stream._stream is None

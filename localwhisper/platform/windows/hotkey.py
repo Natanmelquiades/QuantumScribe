@@ -28,9 +28,29 @@ _VK_MAP: dict[str, int] = {
 for _c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789":
     _VK_MAP[_c.lower()] = ord(_c)
 
+_MODIFIER_ALIASES = {
+    "control": "ctrl",
+    "windows": "win",
+    "super": "win",
+    "cmd": "win",
+}
+_MODIFIERS = {"ctrl", "alt", "shift", "win"}
+
 
 def _parse_hotkey(hotkey: str) -> tuple[int, int]:
-    parts = [p.strip().lower() for p in hotkey.split("+")]
+    parts = [
+        _MODIFIER_ALIASES.get(part.strip().lower(), part.strip().lower())
+        for part in hotkey.split("+")
+    ]
+    if not parts or any(not part for part in parts):
+        raise ValueError(f"Atalho '{hotkey}' possui uma sintaxe inválida.")
+    if len(set(parts)) != len(parts):
+        raise ValueError(f"Atalho '{hotkey}' contém teclas repetidas.")
+
+    main_keys = [part for part in parts if part not in _MODIFIERS]
+    if len(main_keys) != 1:
+        raise ValueError(f"Atalho '{hotkey}' deve conter exatamente uma tecla principal válida.")
+
     mods = 0
     vk = 0
     for part in parts:
@@ -87,24 +107,43 @@ class GlobalHotkey:
         self.thread_id: int | None = None
         self.ready = threading.Event()
         self.error: str | None = None
+        self._stop_requested = threading.Event()
 
-    def start(self, readiness_timeout: float = 0.05) -> None:
+    def start(self, readiness_timeout: float = 0.75) -> None:
+        self.ready.clear()
+        self.error = None
+        self.thread_id = None
+        self._stop_requested.clear()
         self.thread = threading.Thread(target=self._message_loop, daemon=True)
         self.thread.start()
-        self.ready.wait(timeout=readiness_timeout)
+        if not self.ready.wait(timeout=readiness_timeout):
+            self.stop()
+            raise RuntimeError(
+                f"O sistema não confirmou o registro do atalho '{self.hotkey}' a tempo. "
+                "Tente novamente ou escolha outra combinação."
+            )
         if self.error:
+            self.stop()
             raise RuntimeError(self.error)
 
     def stop(self) -> None:
+        self._stop_requested.set()
         if self.thread_id:
             ctypes.windll.user32.PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0)
         if self.thread:
             self.thread.join(timeout=2)
+            if not self.thread.is_alive():
+                self.thread = None
+                self.thread_id = None
 
     def _message_loop(self) -> None:
         user32 = ctypes.windll.user32
         kernel32 = ctypes.windll.kernel32
         self.thread_id = kernel32.GetCurrentThreadId()
+
+        if self._stop_requested.is_set():
+            self.ready.set()
+            return
 
         try:
             mods, vk = _parse_hotkey(self.hotkey)
@@ -124,6 +163,8 @@ class GlobalHotkey:
         self.ready.set()
         message = wintypes.MSG()
         try:
+            if self._stop_requested.is_set():
+                return
             while user32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
                 if message.message == WM_HOTKEY and message.wParam == HOTKEY_ID:
                     if self.on_press:
@@ -162,6 +203,10 @@ class EscapeHotkey:
 
     def register(self, session_id: int | None = None) -> None:
         if self._thread and self._thread.is_alive():
+            # Após cancelamento rápido, o WM_QUIT pode ainda estar na fila da
+            # sessão anterior. Reusar o listener vivo e trocar seu token evita
+            # que a nova gravação fique temporariamente sem Esc.
+            self._session_id = session_id
             return
         self._session_id = session_id
         self._ready.clear()
@@ -170,6 +215,12 @@ class EscapeHotkey:
         self._ready.wait(timeout=1)
 
     def unregister(self, wait: bool = True) -> None:
+        if not wait:
+            # Preserva o listener até a próxima sessão para não disputar seu
+            # ciclo de vida com um registro imediato. Sem sessão, callbacks
+            # atrasados são descartados pelo app.
+            self._session_id = None
+            return
         tid = self._thread_id
         if tid:
             ctypes.windll.user32.PostThreadMessageW(tid, WM_QUIT, 0, 0)

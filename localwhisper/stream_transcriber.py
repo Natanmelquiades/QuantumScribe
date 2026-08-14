@@ -337,6 +337,9 @@ class StreamTranscriber:
         # ---- Stream de áudio -----------------------------------------------
         self._stream: "sd.InputStream" | None = None
         self._running: bool = False
+        self._lifecycle_lock = threading.RLock()
+        self._cancel_requested = threading.Event()
+        self._start_cancelled = threading.Event()
         self._last_amplitude: float = 0.0
         self._amplitude_lock = threading.Lock()
 
@@ -363,8 +366,11 @@ class StreamTranscriber:
             transcriber: Instância de LocalTranscriber com modelo já carregado.
             device_index: Índice do dispositivo de áudio (None = padrão do sistema).
         """
-        self._transcriber = transcriber
-        self._running = True
+        with self._lifecycle_lock:
+            if self._start_cancelled.is_set():
+                return
+            self._transcriber = transcriber
+            self._running = True
 
         # Reinicia estado
         self._audio_chunks = []
@@ -407,23 +413,44 @@ class StreamTranscriber:
         )
         self._processing_thread.start()
 
+        if self._start_cancelled.is_set():
+            return
+
         # Pool de threads: 2 workers para processamento paralelo real ordenado
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=2,
             thread_name_prefix="stream_transcribe",
         )
 
+        if self._start_cancelled.is_set():
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor = None
+            return
+
         # Inicia o stream de áudio
         import sounddevice as sd
-        self._stream = sd.InputStream(
-            device=device_index,
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype="int16",
-            blocksize=512,  # Alinhado com o frame do VAD para menor latência
-            callback=self._audio_callback,
-        )
-        self._stream.start()
+        with self._lifecycle_lock:
+            if self._start_cancelled.is_set():
+                return
+            stream = sd.InputStream(
+                device=device_index,
+                samplerate=SAMPLE_RATE,
+                channels=1,
+                dtype="int16",
+                blocksize=512,  # Alinhado com o frame do VAD para menor latência
+                callback=self._audio_callback,
+            )
+            self._stream = stream
+            stream.start()
+            if self._start_cancelled.is_set():
+                try:
+                    stream.abort()
+                    stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+                self._running = False
+                return
         self.on_status("🔴 Streaming ativo…")
 
     def stop(self) -> str:
@@ -434,6 +461,9 @@ class StreamTranscriber:
         Returns:
             Todo o texto transcrito na sessão, concatenado e limpo.
         """
+        # Também impede que uma thread de start ainda em preparação abra o
+        # microfone depois deste stop.
+        self._start_cancelled.set()
         self._running = False
 
         # 1. Para o stream de áudio PRIMEIRO para garantir que nenhum callback
@@ -479,6 +509,8 @@ class StreamTranscriber:
 
     def cancel(self) -> None:
         """Cancela o streaming imediatamente sem processar áudio pendente."""
+        self._cancel_requested.set()
+        self._start_cancelled.set()
         self._running = False
 
         # Envia sinalizador de parada para a thread de processamento
@@ -500,7 +532,7 @@ class StreamTranscriber:
             self._processing_thread = None
 
         if self._executor:
-            self._executor.shutdown(wait=False)
+            self._executor.shutdown(wait=False, cancel_futures=True)
             self._executor = None
 
     def get_last_amplitude(self) -> float:
@@ -529,6 +561,10 @@ class StreamTranscriber:
                     # Sentinela de parada
                     self._audio_queue.task_done()
                     break
+
+                if self._cancel_requested.is_set():
+                    self._audio_queue.task_done()
+                    continue
 
                 n = len(flat)
 
@@ -569,7 +605,7 @@ class StreamTranscriber:
         Esta função roda em uma thread de alta prioridade do sounddevice.
         Deve ser rápida: apenas copia dados e deposita na fila.
         """
-        if not self._running:
+        if not self._running or self._cancel_requested.is_set():
             return
         if status.input_overflow:
             logger.debug("[StreamTranscriber] Input overflow — chunk perdido.")
@@ -773,6 +809,8 @@ class StreamTranscriber:
         """
         cleaned = ""
         try:
+            if self._cancel_requested.is_set():
+                return
             # ---- 1. Aprimoramento de áudio -----------------------------------
             apply_enhance = bool(getattr(self.config, "audio_enhance", True))
             profile = getattr(self.config, "audio_enhance_profile", "balanced")
@@ -793,6 +831,9 @@ class StreamTranscriber:
                     audio_float,
                     context_prompt=context_prompt,
                 )
+
+                if self._cancel_requested.is_set():
+                    return
 
                 if text and text.strip():
                     # ---- 3. Limpeza de texto ----------------------------------------
@@ -832,11 +873,15 @@ class StreamTranscriber:
                     logger.debug(f"[Chunk #{chunk_id}] Whisper retornou vazio.")
 
         except Exception as e:
+            if self._cancel_requested.is_set():
+                return
             error_msg = f"Falha no chunk #{chunk_id}: {e}"
             logger.error(f"[StreamTranscriber] {error_msg}", exc_info=True)
             self.on_error(error_msg)
         finally:
             # ---- 6. Acumula e notifica em ordem -------------------------------
+            if self._cancel_requested.is_set():
+                return
             with self._output_lock:
                 self._output_buffer[chunk_id] = cleaned
                 # Entrega todos os chunks cuja vez chegou na ordem esperada

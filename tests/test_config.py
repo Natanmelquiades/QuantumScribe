@@ -65,6 +65,21 @@ def test_literal_mode_disables_all_text_transformations(temp_appdata):
     assert config.use_llm_rewriter is False
 
 
+def test_save_normalizes_literal_mode_after_in_memory_changes(temp_appdata):
+    config = AppConfig(literal_mode=True)
+    # SettingsWindow altera a mesma instância após ela já ter passado pelo
+    # __post_init__; a persistência ainda deve preservar o contrato literal.
+    config.continuous_learning = True
+    config.use_llm_rewriter = True
+
+    save_config(config)
+
+    assert config.continuous_learning is False
+    assert config.use_llm_rewriter is False
+    assert load_config().continuous_learning is False
+    assert load_config().use_llm_rewriter is False
+
+
 def test_corrupt_config_is_repaired_with_safe_defaults(temp_appdata):
     config_file = temp_appdata / "QuantumScribe" / "config.json"
     config_file.parent.mkdir(parents=True)

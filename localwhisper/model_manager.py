@@ -64,7 +64,13 @@ def ensure_model_downloaded(
                     ),
                 )
             else:
-                downloader(model_name, cache_dir=str(target))
+                # Downloads com UI/progresso devem receber o mesmo pin que o
+                # caminho padrão; sem isso, a interface baixaria ``main``.
+                downloader(
+                    model_name,
+                    cache_dir=str(target),
+                    revision=MODEL_REVISIONS[model_name],
+                )
         except Exception as error:
             raise ModelDownloadError(
                 "Não foi possível baixar o modelo. Verifique a internet e o espaço "

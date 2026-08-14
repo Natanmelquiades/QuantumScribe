@@ -79,7 +79,16 @@ class AppConfig:
     setup_prompt_dismissed_signature: str = ""     # Não repetir a mesma oferta de preparação a cada abertura
 
     def __post_init__(self) -> None:
-        """Mantém o modelo efetivo alinhado quando a configuração nasce em memória."""
+        """Normaliza a configuração quando ela nasce em memória."""
+        self.normalize()
+
+    def normalize(self) -> None:
+        """Preserva invariantes mesmo quando uma opção muda após a construção.
+
+        A tela de ajustes aplica mudanças na mesma instância de ``AppConfig``. Por
+        isso, deixar esta regra apenas no ``__post_init__`` permitiria persistir
+        combinações que a promessa de Transcrição Literal proíbe.
+        """
         if not self.effective_model:
             self.effective_model = self.model
         # Modo literal é uma promessa de não alterar o texto reconhecido. Também
@@ -174,6 +183,9 @@ def save_config(config: AppConfig) -> None:
     Args:
         config: Instância das configurações a serem escritas.
     """
+    # A instância pode ter sido alterada diretamente pela interface desde sua
+    # criação; normalize antes de persistir qualquer combinação incompatível.
+    config.normalize()
     data = asdict(config)
     data.pop("effective_model", None)
     config_path().write_text(

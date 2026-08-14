@@ -36,7 +36,42 @@ from .download_progress import (
     format_bytes,
 )
 from .hotkey import _parse_hotkey
+from .rewriter import _PINNED_REVISIONS
 from .theme import ACCENT_PRESETS, DEFAULT_ACCENT, Theme, build_theme, font_family
+
+_HOTKEY_FIELDS = {
+    "hotkey": "Ditado Normal",
+    "hotkey_translate": "Ditado + Traduzir",
+    "hotkey_auto_send": "Ditado + Enviar",
+    "hotkey_quantum_brain": "Ditado + Quantum Brain",
+}
+_HOTKEY_ALIASES = {
+    "control": "ctrl",
+    "windows": "win",
+    "super": "win",
+    "cmd": "win",
+}
+
+
+def hotkey_conflict(config: AppConfig, field: str, value: str) -> str | None:
+    """Retorna o rótulo de um atalho equivalente já em uso, se houver."""
+    candidate = frozenset(
+        _HOTKEY_ALIASES.get(part.strip().lower(), part.strip().lower())
+        for part in value.split("+")
+    )
+    for other_field, label in _HOTKEY_FIELDS.items():
+        if other_field == field:
+            continue
+        other_value = str(getattr(config, other_field, "") or "").strip()
+        if not other_value:
+            continue
+        other = frozenset(
+            _HOTKEY_ALIASES.get(part.strip().lower(), part.strip().lower())
+            for part in other_value.split("+")
+        )
+        if candidate == other:
+            return label
+    return None
 
 
 def get_project_root() -> Path:
@@ -794,18 +829,18 @@ class SettingsWindow(tk.Toplevel):
              toast_kind: str = "success") -> None:
         """Grava o campo na configuração e aplica imediatamente no app."""
         setattr(self._cfg, field, value)
-        if field == "literal_mode" and value:
-            incompatible = (
-                ("remove_stutters", "remove_stutters_var"),
-                ("remove_fillers", "remove_fillers_var"),
-                ("continuous_learning", "learning_var"),
-                ("use_llm_rewriter", "rewriter_var"),
-            )
-            for config_field, variable_name in incompatible:
-                setattr(self._cfg, config_field, False)
-                variable = getattr(self, variable_name, None)
-                if variable is not None:
-                    variable.set(False)
+        # AppConfig também é atualizado fora do construtor pela UI. Reaplique
+        # invariantes aqui para que um controle incompatível nunca pareça ativo.
+        self._cfg.normalize()
+        for config_field, variable_name in (
+            ("remove_stutters", "remove_stutters_var"),
+            ("remove_fillers", "remove_fillers_var"),
+            ("continuous_learning", "learning_var"),
+            ("use_llm_rewriter", "rewriter_var"),
+        ):
+            variable = getattr(self, variable_name, None)
+            if variable is not None:
+                variable.set(getattr(self._cfg, config_field))
         try:
             self.on_save_callback(self._cfg)
         except Exception:
@@ -1158,9 +1193,16 @@ def _page_dictation(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
                   lambda: dict((k, n) for k, n, _d in DEVICES).get(self._cfg.device, "Automático"),
                   "sub_hardware")
 
-    self._row_nav(card, "Prompt Auxiliar",
-                  "Vocabulário e regras ensinados ao modelo.",
-                  "Editar", "sub_prompt")
+    if self.literal_mode_var.get():
+        self._row_base(
+            card,
+            "Prompt Auxiliar",
+            "Inativo durante a Transcrição Literal para preservar as palavras reconhecidas.",
+        )
+    else:
+        self._row_nav(card, "Prompt Auxiliar",
+                      "Vocabulário e regras ensinados ao modelo.",
+                      "Editar", "sub_prompt")
 
     # --- Estilo do texto ---
     card = self._card(body, "Estilo do Texto")
@@ -1192,11 +1234,19 @@ def _page_dictation(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
 
         self._row_toggle(card, "Remover Hesitações",
                          "Remove sons como “hmm”, “ãh” e “eh” do texto final.",
-                         self.remove_fillers_var, "remove_fillers")
+                         self.remove_fillers_var, "remove_fillers",
+                         on_change=lambda _v: self._rebuild_page("dictation"))
 
-        self._row_nav(card, "Hesitações Personalizadas",
-                      "Palavras extras a remover, separadas por vírgula.",
-                      "Editar", "sub_fillers")
+        if self.remove_fillers_var.get():
+            self._row_nav(card, "Hesitações Personalizadas",
+                          "Palavras extras a remover, separadas por vírgula.",
+                          "Editar", "sub_fillers")
+        else:
+            self._row_base(
+                card,
+                "Hesitações Personalizadas",
+                "Inativas — ative Remover Hesitações para editar a lista.",
+            )
 
     # --- Saída ---
     card = self._card(body, "Saída do Texto")
@@ -1286,12 +1336,13 @@ def _select_model(self: SettingsWindow, model_id: str) -> None:
     if model_id == self._cfg.model:
         return
     name = MODELS_MAP.get(model_id, {}).get("name", model_id)
-    if is_model_downloaded(model_id):
-        self._set("model", model_id, toast=f"Modelo {name} ativado")
-    else:
-        self._set("model", model_id,
-                  toast=f"Modelo {name} selecionado — o download começará em segundo plano",
-                  toast_kind="info")
+    if not is_model_downloaded(model_id):
+        self._toast(
+            f"Baixe o modelo {name} antes de ativá-lo.",
+            kind="info",
+        )
+        return
+    self._set("model", model_id, toast=f"Modelo {name} ativado")
     self._rebuild_page("sub_model")
 
 
@@ -1329,8 +1380,8 @@ def _start_model_download(self: SettingsWindow, model_id: str) -> None:
         try:
             ensure_model_downloaded(
                 model_id,
-                downloader=lambda m, cache_dir: download_whisper_with_progress(
-                    m, cache_dir, on_progress),
+                downloader=lambda m, *, cache_dir, revision: download_whisper_with_progress(
+                    m, cache_dir, on_progress, revision=revision),
             )
         except (ModelDownloadError, Exception) as exc:  # noqa: BLE001
             error = exc
@@ -1529,53 +1580,71 @@ def _page_ai(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
 
     card = self._card(body, "Reescrita Inteligente")
 
-    self._row_toggle(
-        card, "Pós-Processamento Inteligente",
-        "Reescreve o texto com um modelo de linguagem local (Mini-LLM), "
-        "aplicando o estilo escolhido sem enviar nada à nuvem.",
-        self.rewriter_var, "use_llm_rewriter",
-        on_change=lambda _v: self._rebuild_page("ai"),
-    )
+    if self.literal_mode_var.get():
+        self._row_base(
+            card,
+            "Pós-Processamento Inteligente",
+            "Inativo durante a Transcrição Literal para não alterar palavras reconhecidas.",
+        )
+        self._row_base(
+            card,
+            "Estilo da Transcrição",
+            "Inativo durante a Transcrição Literal.",
+        )
+        card = self._card(body, "Aprendizado")
+        self._row_base(
+            card,
+            "Aprendizado Contínuo",
+            "Inativo durante a Transcrição Literal para preservar o texto reconhecido.",
+        )
+    else:
+        self._row_toggle(
+            card, "Pós-Processamento Inteligente",
+            "Reescreve o texto com um modelo de linguagem local (Mini-LLM), "
+            "aplicando o estilo escolhido sem enviar nada à nuvem.",
+            self.rewriter_var, "use_llm_rewriter",
+            on_change=lambda _v: self._rebuild_page("ai"),
+        )
 
-    # Status e download do Mini-LLM com percentual real
-    if self.rewriter_var.get():
-        from .rewriter import is_rewriter_downloaded
-        repo_id = self._cfg.llm_model_repo
-        downloaded = is_rewriter_downloaded(repo_id)
+        # Status e download do Mini-LLM com percentual real
+        if self.rewriter_var.get():
+            from .rewriter import is_rewriter_downloaded
+            repo_id = self._cfg.llm_model_repo
+            downloaded = is_rewriter_downloaded(repo_id)
 
-        if downloaded:
-            row = self._row_base(card, "Modelo de Reescrita",
-                                 "Mini-LLM instalado e pronto para uso offline.")
-            tk.Label(row, text="✓ Instalado", font=(self.font_name, 9, "bold"),
-                     fg=t.success, bg=t.card_bg).grid(row=0, column=1, sticky="e")
-        elif self._llm_dl_active:
-            row = self._row_base(card, "Baixando Mini-LLM…", None)
-            dl_box = tk.Frame(row, bg=t.card_bg)
-            dl_box.grid(row=0, column=1, sticky="e")
-            self._llm_pct_var = getattr(self, "_llm_pct_var", tk.DoubleVar(value=0.0))
-            bar = ttk.Progressbar(dl_box, orient="horizontal", mode="determinate",
-                                  variable=self._llm_pct_var, maximum=100.0, length=180,
-                                  style="Accent.Horizontal.TProgressbar")
-            bar.pack(side="left")
-            self._llm_pct_label = tk.Label(dl_box, text="0%", width=5, anchor="e",
-                                           font=(self.font_name, 9, "bold"),
-                                           fg=t.accent, bg=t.card_bg)
-            self._llm_pct_label.pack(side="left", padx=(8, 0))
-        else:
-            self._row_action(card, "Modelo de Reescrita",
-                             "Necessário baixar o pacote de IA (~400 MB) uma única vez.",
-                             "Baixar Mini-LLM", lambda: self._start_llm_download(), "primary")
+            if downloaded:
+                row = self._row_base(card, "Modelo de Reescrita",
+                                     "Mini-LLM instalado e pronto para uso offline.")
+                tk.Label(row, text="✓ Instalado", font=(self.font_name, 9, "bold"),
+                         fg=t.success, bg=t.card_bg).grid(row=0, column=1, sticky="e")
+            elif self._llm_dl_active:
+                row = self._row_base(card, "Baixando Mini-LLM…", None)
+                dl_box = tk.Frame(row, bg=t.card_bg)
+                dl_box.grid(row=0, column=1, sticky="e")
+                self._llm_pct_var = getattr(self, "_llm_pct_var", tk.DoubleVar(value=0.0))
+                bar = ttk.Progressbar(dl_box, orient="horizontal", mode="determinate",
+                                      variable=self._llm_pct_var, maximum=100.0, length=180,
+                                      style="Accent.Horizontal.TProgressbar")
+                bar.pack(side="left")
+                self._llm_pct_label = tk.Label(dl_box, text="0%", width=5, anchor="e",
+                                               font=(self.font_name, 9, "bold"),
+                                               fg=t.accent, bg=t.card_bg)
+                self._llm_pct_label.pack(side="left", padx=(8, 0))
+            else:
+                self._row_action(card, "Modelo de Reescrita",
+                                 "Necessário baixar o pacote de IA (~400 MB) uma única vez.",
+                                 "Baixar Mini-LLM", lambda: self._start_llm_download(), "primary")
 
-    self._row_nav(card, "Estilo da Transcrição",
-                  "Tom de voz aplicado na reescrita do texto.",
-                  lambda: self._tone_display_name(self._cfg.tone_style), "sub_tone")
+        self._row_nav(card, "Estilo da Transcrição",
+                      "Tom de voz aplicado na reescrita do texto.",
+                      lambda: self._tone_display_name(self._cfg.tone_style), "sub_tone")
 
-    card = self._card(body, "Aprendizado")
+        card = self._card(body, "Aprendizado")
 
-    self._row_toggle(
-        card, "Aprendizado Contínuo",
-        "Aprende com as suas notas do diário e prioriza o vocabulário que você mais usa.",
-        self.learning_var, "continuous_learning")
+        self._row_toggle(
+            card, "Aprendizado Contínuo",
+            "Aprende com as suas notas do diário e prioriza o vocabulário que você mais usa.",
+            self.learning_var, "continuous_learning")
 
     note = tk.Label(
         body,
@@ -1623,7 +1692,15 @@ def _start_llm_download(self: SettingsWindow) -> None:
         repo_id = self._cfg.llm_model_repo
         error: Exception | None = None
         try:
-            download_snapshot_with_progress(repo_id, _get_model_path(repo_id), on_progress)
+            revision = _PINNED_REVISIONS.get(repo_id)
+            if revision is None:
+                raise ValueError("Repositório de Mini-LLM não aprovado nesta versão do Quantum Scribe")
+            download_snapshot_with_progress(
+                repo_id,
+                _get_model_path(repo_id),
+                on_progress,
+                revision=revision,
+            )
         except Exception as exc:  # noqa: BLE001
             error = exc
 
@@ -1832,13 +1909,21 @@ def _page_audio(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
         self._row_toggle(card, "Aprimorar Áudio",
                          "Filtro de graves, redução de ruído e normalização de volume "
                          "antes da transcrição contínua.",
-                         self.audio_enhance_var, "audio_enhance")
+                         self.audio_enhance_var, "audio_enhance",
+                         on_change=lambda _v: self._rebuild_page("audio"))
 
-        self._row_nav(card, "Perfil de Aprimoramento",
-                      "Intensidade do processamento de áudio.",
-                      lambda: dict((k, n) for k, n, _d in ENHANCE_PROFILES).get(
-                          self._cfg.audio_enhance_profile, "Equilibrado"),
-                      "sub_profile")
+        if self.audio_enhance_var.get():
+            self._row_nav(card, "Perfil de Aprimoramento",
+                          "Intensidade do processamento de áudio.",
+                          lambda: dict((k, n) for k, n, _d in ENHANCE_PROFILES).get(
+                              self._cfg.audio_enhance_profile, "Equilibrado"),
+                          "sub_profile")
+        else:
+            self._row_base(
+                card,
+                "Perfil de Aprimoramento",
+                "Inativo — ative Aprimorar Áudio para escolher um perfil.",
+            )
     else:
         self._row_base(card, "Aprimoramento de Áudio",
                        "Inativo — requer Modo Streaming Contínuo. O modo clássico "
@@ -2200,6 +2285,12 @@ def _hotkey_row(self: SettingsWindow, card: tk.Frame, label: str, desc: str,
             entry.delete(0, "end")
             entry.insert(0, getattr(self._cfg, field, "") or "")
             self._toast(f"Atalho inválido: {exc}", kind="error")
+            return
+        conflict = hotkey_conflict(self._cfg, field, value)
+        if conflict is not None:
+            entry.delete(0, "end")
+            entry.insert(0, getattr(self._cfg, field, "") or "")
+            self._toast(f"Atalho já usado por “{conflict}”", kind="error")
             return
         self._set(field, value, toast=f"Atalho “{label}” atualizado")
 

@@ -74,6 +74,13 @@ mesmo sem prioridade ou especificação completa. Durante o refinamento, cada it
 | QS-018 | Verificar e atualizar somente o aplicativo | Feature | Em refinamento | P2 — Média | G | [Abrir PRD](PRD_QS018_ATUALIZACAO_APLICATIVO.md) |
 | QS-019 | Tornar a instalação e a primeira execução calmas e verificáveis | Melhoria | Em refinamento | P1 — Alta | G | [PRD relacionado](PRD_CORE_LEVE_COMPONENTES_SOB_DEMANDA.md) |
 | QS-020 | Acelerar a primeira transcrição com preparação antecipada | Melhoria | Em refinamento | P1 — Alta | M | A criar |
+| QS-021 | Restaurar manifesto de dependências e release reproduzível | Bug | Em refinamento | P1 — Alta | M | A criar |
+| QS-022 | Contrato único de atalhos e conflitos entre plataformas | Bug | Em refinamento | P1 — Alta | M | A criar |
+| QS-023 | Isolar sessões e cancelamento cooperativo de ditados | Bug | Em refinamento | P1 — Alta | G | A criar |
+| QS-024 | Garantir paridade e qualidade do streaming contínuo | Melhoria | Em refinamento | P2 — Média | G | A criar |
+| QS-025 | Concluir o Quantum Brain com resultado verificável | Bug | Em refinamento | P2 — Média | M | A criar |
+| QS-026 | Retirar compatibilidades e artefatos obsoletos com migração segura | Débito técnico | Em refinamento | P2 — Média | M | A criar |
+| QS-027 | Inicialização rápida de dispositivos de áudio virtuais no Windows | Melhoria | Em refinamento | P1 — Alta | M | A criar |
 
 ## Programa de implementação
 
@@ -802,6 +809,228 @@ _Nenhum item aguardando triagem._
 - **Próxima decisão:** coletar uma linha de base em hardware fraco, intermediário
   e NVIDIA, validar os limites de memória e decidir se a preparação antecipada
   será padrão automático ou uma preferência explícita.
+
+### QS-021 — Restaurar manifesto de dependências e release reproduzível
+
+- **Tipo:** Bug de instalação e distribuição.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-006 — Download resiliente; QS-019 — Instalação e primeira execução.
+- **Problema confirmado na auditoria:** os manifestos de CPU, Windows e Linux
+  ainda incluem `requirements-base.txt`, mas esse arquivo está ausente no
+  worktree atual. Uma instalação a partir desses manifests falha antes de criar
+  o ambiente. Como a remoção pode ser trabalho local intencional, ela não foi
+  revertida automaticamente.
+- **Resultado desejado:** cada caminho oficial de instalação deve resolver um
+  manifesto completo, versionado e verificável, sem depender de arquivo ausente
+  nem de dependências implícitas do ambiente de desenvolvimento.
+- **Andamento (v2.2.28):** a referência quebrada foi substituída por
+  `requirements-common.txt`, preservando a remoção local de
+  `requirements-base.txt`. CPU, CUDA, Windows, Linux e teste agora resolvem o
+  manifesto comum; há teste de regressão para includes e o resolvedor do `pip`
+  foi executado em modo seco para CPU. Os arquivos `.lock` atuais continuam
+  semanticamente compatíveis, mas precisam ser regenerados para atualizar sua
+  proveniência comentada e validar cada plataforma em ambiente realmente limpo.
+- **Regras preliminares:**
+  - decidir explicitamente entre restaurar um manifesto-base, consolidar os
+    manifests por plataforma ou substituir a referência por outro arquivo;
+  - não modificar nem restaurar deleções locais sem confirmar sua origem;
+  - validar instalação limpa de CPU, Windows e Linux em ambiente isolado;
+  - manter locks e manifests de build/teste coerentes com os requisitos de
+    runtime;
+  - documentar um único comando recomendado por plataforma.
+- **Critério principal de aceite:** cada arquivo de requisitos referenciado por
+  README, scripts e CI existe e `pip install -r` conclui em ambiente limpo para
+  a plataforma correspondente.
+- **Próxima decisão:** regenerar locks com o manifesto novo e executar os
+  installs isolados de CPU/Windows/Linux antes da próxima release.
+
+### QS-022 — Contrato único de atalhos e conflitos entre plataformas
+
+- **Tipo:** Bug de previsibilidade dos controles.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-003 — Configurações contextuais; QS-017 — Prontidão e
+  feedback de estado.
+- **Problema confirmado na auditoria:** o parser Windows aceitava teclas
+  repetidas ou mais de uma tecla principal e usava silenciosamente a última;
+  Linux já rejeitava esses formatos. A tela também não validava colisões entre
+  os quatro atalhos globais antes de salvar e reconfigurar.
+- **Resultado desejado:** o mesmo atalho válido deve ter a mesma interpretação
+  em Windows e Linux, e nenhuma ação pode disputar a mesma combinação.
+- **Andamento (v2.2.29):** parser Windows passou a rejeitar teclas repetidas ou
+  mais de uma tecla principal; a interface bloqueia colisões equivalentes entre
+  as quatro ações e os testes cobrem aliases e conflitos. O registro Windows
+  agora espera confirmação explícita (ou falha de forma visível), e o listener
+  de Esc é reaproveitado com o token da nova sessão após um cancelamento rápido.
+  Falta tornar a troca do conjunto inteiro de hotkeys transacional, preservando
+  os atalhos anteriores se algum registro no SO falhar.
+- **Regras preliminares:**
+  - normalizar aliases aceitos e exigir exatamente uma tecla principal;
+  - rejeitar teclas repetidas, sintaxe incompleta e colisões equivalentes,
+    inclusive em ordem diferente dos modificadores;
+  - preservar o atalho anterior se uma nova combinação falhar no registro pelo
+    sistema operacional;
+  - tornar erro tardio ou conflito externo visível, sem deixar o controle
+    parecendo ativo;
+  - cobrir entrada válida, inválida, duplicada e falha de registro em ambas as
+    plataformas suportadas.
+- **Critério principal de aceite:** uma configuração inválida ou em conflito
+  não é persistida nem desregistra um atalho funcional existente.
+
+### QS-023 — Isolar sessões e cancelamento cooperativo de ditados
+
+- **Tipo:** Bug de confiabilidade e privacidade.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** G.
+- **Relacionado a:** QS-001 — Fila; QS-004 — HUD; QS-016 — Cancelamento; QS-017
+  — Estabilidade visual.
+- **Constatação da auditoria:** foi corrigida a rota imediata para parar e
+  cancelar o streaming pelo atalho, HUD e `Esc`. Ainda falta isolar por token
+  todas as tarefas clássicas e de streaming: uma decodificação cancelada pode
+  terminar tarde, o áudio clássico usa um caminho temporário compartilhado e
+  callbacks/futures antigos precisam ser suprimidos antes de atualizar HUD,
+  clipboard ou destino de texto.
+- **Resultado desejado:** cada gravação e processamento possui identidade,
+  arquivo temporário e cancelamento próprios; nenhum evento antigo entrega texto
+  ou altera o estado de uma sessão posterior.
+- **Andamento (v2.2.29):** o fluxo clássico agora cria um identificador
+  imutável e WAV exclusivo por job. Cancelar invalida o job antes de sinalizar o
+  transcritor, e resultados, status, HUD final, erro, clipboard/colagem e a
+  limpeza do áudio de emergência são aceitos somente pelo dono vigente. Testes
+  simulam cancelamento seguido de novo job e confirmam que a mensagem final de
+  um job válido ainda é entregue. No streaming, cancelar também bloqueia uma
+  inicialização concorrente de reabrir o microfone, cancela futures ainda não
+  iniciados e descarta callbacks tardios. Ainda falta isolar o evento de
+  cancelamento do transcritor clássico e limitar/serializar a fila do streaming.
+- **Regras preliminares:**
+  - usar identificador imutável por gravação/job em UI, workers e callbacks;
+  - criar WAV temporário exclusivo por sessão e limpá-lo somente pelo dono;
+  - tornar o cancelamento cooperativo, sem prometer interromper em segurança uma
+    decodificação nativa já em execução;
+  - descartar resultados, erro, som, HUD e colagem que não pertençam ao job ativo;
+  - definir limite/backpressure para filas e futures pendentes;
+  - testar cancelamento seguido de novo ditado, callbacks tardios, fechamento e
+    transições rápidas sob carga.
+- **Critério principal de aceite:** após cancelar e iniciar vários ditados em
+  sequência, nenhum texto, áudio, HUD ou ação de uma sessão anterior alcança a
+  sessão atual.
+
+### QS-024 — Garantir paridade e qualidade do streaming contínuo
+
+- **Tipo:** Melhoria de reconhecimento e experiência.
+- **Prioridade preliminar:** P2 — Média.
+- **Esforço preliminar:** G.
+- **Relacionado a:** QS-001 — Fila; QS-003 — Dependências de configurações;
+  QS-020 — Desempenho da primeira transcrição.
+- **Problema observado na auditoria:** o streaming aplica apenas parte do
+  pós-processamento clássico; sobrepõe aproximadamente 0,3 segundo de áudio sem
+  deduplicação textual e atualiza contexto na ordem de término dos workers,
+  embora a decodificação seja serializada internamente. O HUD também precisa
+  continuar refletindo o sinal e o texto da sessão correta.
+- **Resultado desejado:** o modo contínuo deve explicar claramente o que aplica
+  e produzir texto ordenado, sem duplicações de fronteira ou funções configuradas
+  que sejam silenciosamente ignoradas.
+- **Regras preliminares:**
+  - comparar recurso a recurso os pipelines clássico e contínuo, inclusive
+    dicionário, cache, reescrita e literal;
+  - deduplicar de modo determinístico as bordas sobrepostas sem remover palavras
+    legítimas;
+  - preservar a ordem de chunks, contexto e entrega independentemente da ordem
+    de conclusão dos workers;
+  - medir se paralelismo real existe antes de manter dois workers e sua
+    complexidade;
+  - incluir testes com fala contínua, pausas, cancelamento e preview do HUD.
+- **Critério principal de aceite:** uma gravação contínua de referência não
+  duplica palavras nas bordas e aplica somente as opções anunciadas para esse
+  modo.
+
+### QS-025 — Concluir o Quantum Brain com resultado verificável
+
+- **Tipo:** Bug de funcionalidade parcialmente entregue.
+- **Prioridade preliminar:** P2 — Média.
+- **Esforço preliminar:** M.
+- **Relacionado a:** configurações de Quantum Brain e componentes opcionais.
+- **Constatação da auditoria:** a síntese por LLM depende de `transformers`, que
+  não está declarado nos manifests atuais; a interface não prepara o modelo
+  dedicado do Quantum Brain e informa conclusão logo após disparar o trabalho,
+  mesmo quando o fluxo usa fallback heurístico ou ainda está executando.
+- **Resultado desejado:** a pessoa deve saber se recebeu síntese local por LLM,
+  fallback heurístico, pendência de componente ou falha, e a ação manual só pode
+  informar conclusão quando houver resultado verificável.
+- **Regras preliminares:**
+  - decidir entre declarar/preparar as dependências reais ou formalizar o
+    fallback como comportamento do produto;
+  - expor progresso, sucesso e erro reais da síntese manual;
+  - não baixar modelo grande sem consentimento, tamanho e origem claros;
+  - incluir testes sem LLM, com LLM disponível e com falha de preparação.
+- **Critério principal de aceite:** ao acionar síntese manual, a interface mostra
+  o resultado efetivo somente após a operação terminar e não promete LLM quando
+  o fallback foi usado.
+
+### QS-026 — Retirar compatibilidades e artefatos obsoletos com migração segura
+
+- **Tipo:** Débito técnico e manutenção de distribuição.
+- **Prioridade preliminar:** P2 — Média.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-019 — Instalação; QS-021 — Manifests reproduzíveis.
+- **Problema observado:** há flags reservadas sem leitura em runtime, helpers e
+  buffers aparentemente sem chamadores internos e artefatos de build/teste
+  grandes. Alguns podem ser compatibilidade de configuração, defesa de download
+  ou trabalho local ainda não publicado; removê-los agora pode quebrar migração,
+  build ou recuperação.
+- **Resultado desejado:** reduzir manutenção e espaço sem remover dados do
+  usuário, compatibilidades ou defesas ainda necessárias.
+- **Regras preliminares:**
+  - inventariar chamadores, configurações antigas e conteúdo dos artefatos antes
+    de qualquer remoção;
+  - criar migração versionada e aviso para campos persistidos que forem
+    aposentados;
+  - preservar `effective_model`, proteções de updater e caminhos pinados até
+    uma substituição testada;
+  - tratar diretórios/ZIPs grandes como decisão explícita e recuperável, nunca
+    como limpeza automática;
+  - adicionar testes de regressão antes de retirar cada símbolo ou flag.
+- **Critério principal de aceite:** toda remoção possui inventário, migração ou
+  prova de ausência de uso, e uma suíte limpa de build/teste continua produzindo
+  os mesmos artefatos oficiais esperados.
+
+### QS-027 — Inicialização rápida de dispositivos de áudio virtuais no Windows
+
+- **Tipo:** Melhoria de desempenho e compatibilidade de áudio.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Relacionado a:** QS-017 — Estabilidade e prontidão; QS-020 — Primeira
+  transcrição mais rápida.
+- **Problema confirmado:** após a instalação do NVIDIA Broadcast, o dispositivo
+  virtual selecionado pelo Windows aparece via MME. Na máquina auditada, abrir
+  esse caminho levou aproximadamente 235 ms, enquanto a duplicata WASAPI do
+  mesmo dispositivo aceitou conversão automática para 16 kHz e abriu em cerca
+  de 18 ms. O atraso acontece antes de o HUD conseguir receber áudio.
+- **Andamento (v2.2.31):** no Windows, o gravador procura a duplicata WASAPI
+  correspondente e usa `auto_convert` para manter o formato do Whisper. Se o
+  driver virtual não aceitar a abertura, o dispositivo original continua sendo
+  usado automaticamente. O beep de início não bloqueia mais a abertura: os
+  primeiros 200 ms são descartados pelo gravador para preservar o sinal sonoro
+  sem atrasar a captura. A medição foi feita sem salvar áudio e os testes cobrem
+  seleção, fallback e a janela de descarte.
+- **Resultado desejado:** Ctrl+Space deve ativar a captura perceptivelmente mais
+  rápido, sem trocar silenciosamente o microfone escolhido, alterar pitch ou
+  perder compatibilidade com drivers virtuais.
+- **Regras preliminares:**
+  - aplicar a preferência somente no Windows e somente quando houver duplicata
+    WASAPI com o mesmo nome e validação de entrada em 16 kHz;
+  - preservar o caminho MME/host padrão como fallback transparente;
+  - não manter o microfone aberto fora de uma sessão de gravação;
+  - medir abertura, primeiro callback e tempo até `Ouvindo…` separadamente;
+  - validar Broadcast, microfones físicos e drivers virtuais sem duplicata.
+- **Critério principal de aceite:** numa instalação com NVIDIA Broadcast, a
+  captura inicia pelo caminho WASAPI validado ou recua sem erro ao caminho
+  anterior; o áudio continua chegando em 16 kHz e a abertura não regride para
+  além do fallback MME.
+- **Próxima decisão:** coletar medidas em outros drivers virtuais e decidir se
+  a preferência WASAPI deve ser configurável quando o dispositivo escolhido não
+  for o padrão do sistema.
 
 ## Pronto para priorização
 

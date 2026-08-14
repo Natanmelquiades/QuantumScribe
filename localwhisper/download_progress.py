@@ -89,6 +89,8 @@ def download_whisper_with_progress(
     model_name: str,
     cache_dir: str | Path,
     on_progress: ProgressCallback | None = None,
+    *,
+    revision: str,
 ) -> str:
     """Baixa um modelo Whisper Systran reportando percentual global real.
 
@@ -107,6 +109,7 @@ def download_whisper_with_progress(
     ]
     return snapshot_download(
         repo_id=f"Systran/faster-whisper-{model_name}",
+        revision=revision,
         allow_patterns=allow_patterns,
         cache_dir=str(cache_dir),
         tqdm_class=session.make_tqdm_class(),
@@ -117,6 +120,8 @@ def download_snapshot_with_progress(
     repo_id: str,
     local_dir: str | Path,
     on_progress: ProgressCallback | None = None,
+    *,
+    revision: str,
 ) -> str:
     """Baixa um repositório genérico do Hub (ex.: Mini-LLM) com percentual real."""
     from huggingface_hub import snapshot_download
@@ -124,6 +129,7 @@ def download_snapshot_with_progress(
     session = _ProgressSession(on_progress)
     return snapshot_download(
         repo_id=repo_id,
+        revision=revision,
         local_dir=str(local_dir),
         tqdm_class=session.make_tqdm_class(),
     )

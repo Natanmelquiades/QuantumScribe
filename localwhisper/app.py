@@ -13,6 +13,8 @@ import os
 import tempfile
 import threading
 import tkinter as tk
+import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 # Remove o logo do Python da barra de tarefas forçando o AppUserModelID exclusivo no Windows
@@ -68,7 +70,7 @@ class QuantumScribeApp:
         self.popup = Popup(
             self.root,
             self._on_hud_cancel,
-            get_amplitude=self.recorder.get_last_amplitude,
+            get_amplitude=self._get_active_amplitude,
             config=self.config
         )
         self.transcriber = LocalTranscriber(self.config, self._threadsafe_status)
@@ -76,6 +78,9 @@ class QuantumScribeApp:
         self.processing = False
         self.starting = False
         self._transcription_thread: threading.Thread | None = None
+        self._active_transcription_job: int | None = None
+        self._next_transcription_job = 0
+        self._transcription_context = threading.local()
         self._recording_session = 0
         self._cancel_confirmation_pending_session: int | None = None
         self._setup_offer_pending = False
@@ -87,6 +92,8 @@ class QuantumScribeApp:
 
         # ---- Streaming mode -----------------------------------------------
         self._stream_session = None  # Instância ativa de StreamTranscriber
+        self._stream_session_id: int | None = None
+        self._stream_stopping = False
         self._stream_accumulated: list[str] = []  # Texto acumulado dos chunks
         self._stream_target_window = WindowTarget(0)  # Janela destino do streaming
         self._stream_auto_send = False
@@ -170,6 +177,13 @@ class QuantumScribeApp:
             self.hotkey_quantum_brain.stop()
             self.hotkey_quantum_brain = None
 
+    def _get_active_amplitude(self) -> float:
+        """Fornece ao HUD o sinal do gravador que estiver ativo."""
+        session = getattr(self, "_stream_session", None)
+        if session is not None:
+            return session.get_last_amplitude()
+        return self.recorder.get_last_amplitude()
+
     def run(self) -> None:
         """Inicia a aplicação executando os loops de escuta e o loop principal do Tkinter."""
         self.tray.start()
@@ -225,12 +239,12 @@ class QuantumScribeApp:
         self.root.after(0, lambda: self._end_cancel_hold(session_id))
 
     def _begin_cancel_hold(self, session_id: int | None) -> None:
-        if session_id != self._recording_session or not self.recorder.is_recording:
+        if session_id != self._recording_session or not self._has_cancelable_capture():
             return
         self.popup.start_cancel_hold(ESC_HOLD_SECONDS)
 
     def _confirm_cancel_hold(self, session_id: int | None) -> None:
-        if session_id != self._recording_session or not self.recorder.is_recording:
+        if session_id != self._recording_session or not self._has_cancelable_capture():
             return
         if session_id == self._cancel_confirmation_pending_session:
             return
@@ -245,10 +259,39 @@ class QuantumScribeApp:
         if session_id == self._recording_session:
             self.popup.clear_cancel_hold()
 
+    def _has_cancelable_capture(self) -> bool:
+        """Indica se há uma sessão de áudio que pode ser cancelada com segurança."""
+        return self.recorder.is_recording or self._stream_session is not None
+
     def _schedule_popup_hide(self, delay_ms: int) -> None:
         """Oculta somente a sessão visual que originou a mensagem temporária."""
         generation = self.popup.visual_generation
         self.root.after(delay_ms, lambda: self.popup.hide(generation))
+
+    def _is_active_transcription_job(self, job_id: int) -> bool:
+        """Indica se um worker ainda pertence à transcrição que está em foco."""
+        return getattr(self, "_active_transcription_job", None) == job_id
+
+    def _schedule_for_active_transcription_job(self, job_id: int, callback: Callable[[], None]) -> None:
+        """Agenda uma atualização de UI apenas para o job de transcrição vigente."""
+        def run_if_current() -> None:
+            if self._is_active_transcription_job(job_id):
+                callback()
+
+        self.root.after(0, run_if_current)
+
+    def _finish_active_transcription_job(self, job_id: int, callback: Callable[[], None]) -> None:
+        """Mostra o resultado final e só então encerra a identidade do job."""
+        def finish_if_current() -> None:
+            if not self._is_active_transcription_job(job_id):
+                return
+            try:
+                callback()
+            finally:
+                if self._is_active_transcription_job(job_id):
+                    self._active_transcription_job = None
+
+        self.root.after(0, finish_if_current)
 
     def open_config_from_thread(self, *_args: object) -> None:
         """Abre o arquivo de configurações do usuário."""
@@ -265,7 +308,9 @@ class QuantumScribeApp:
         - Durante gravação → cancela a captura de áudio
         - Durante transcrição → cancela o processamento da IA
         """
-        if self.processing:
+        if self._stream_session is not None:
+            self.cancel_recording()
+        elif self.processing:
             self.cancel_transcription()
         else:
             self.cancel_recording()
@@ -274,6 +319,14 @@ class QuantumScribeApp:
 
     def toggle_recording(self, translate: bool = False, auto_send: bool = False, quantum_brain: bool = False) -> None:
         """Inicia ou finaliza o processo de gravação baseado no estado atual."""
+        # Uma sessão de streaming continua com ``processing=True`` enquanto capta
+        # áudio. Ela precisa ser tratada antes do guard genérico para que o mesmo
+        # atalho consiga finalizá-la, mesmo se a configuração mudou no meio dela.
+        if self._stream_session is not None:
+            if not self._stream_stopping and not translate and not quantum_brain:
+                self._stop_streaming(auto_send)
+            return
+
         if self.processing or self.starting:
             return
 
@@ -308,8 +361,9 @@ class QuantumScribeApp:
         if self.config.play_sounds:
             self.starting = True
             play_start_sound(self.config.sound_volume)
-            # Atraso de 180ms para garantir que o som do bipe não seja gravado pelo microfone
-            self.root.after(180, self._do_start_recording)
+            # Abre o microfone imediatamente. O gravador descarta os primeiros
+            # 200 ms, enquanto o beep termina, sem atrasar a percepção do usuário.
+            self._do_start_recording(ignore_audio_seconds=0.20)
         else:
             self._do_start_recording()
 
@@ -325,7 +379,7 @@ class QuantumScribeApp:
             self.root.after(0, lambda: self._show_error(f"Limite de {max_min} minutos atingido — gravação finalizada automaticamente."))
             self.root.after(0, self.toggle_recording)
 
-    def _do_start_recording(self) -> None:
+    def _do_start_recording(self, ignore_audio_seconds: float = 0.0) -> None:
         """Inicia fisicamente a gravação de áudio do microfone."""
         self.starting = False
         try:
@@ -334,7 +388,8 @@ class QuantumScribeApp:
             self.recorder.start(
                 device_index=device_index,
                 max_seconds=max_sec,
-                on_limit_reached=self._on_recording_limit_reached
+                on_limit_reached=self._on_recording_limit_reached,
+                ignore_audio_seconds=ignore_audio_seconds,
             )
         except Exception as error:
             self.popup.show_message("Microfone indisponível", str(error), error=True)
@@ -362,23 +417,30 @@ class QuantumScribeApp:
         """Finaliza a captação de áudio e inicia o pipeline assíncrono de transcrição."""
         self.processing = True
         self._recording_session += 1
+        self._next_transcription_job += 1
+        job_id = self._next_transcription_job
+        self._active_transcription_job = job_id
         self._cancel_confirmation_pending_session = None
         self.popup.clear_cancel_hold()
         self.esc_hotkey.unregister()
 
-        audio_path = Path(tempfile.gettempdir()) / "localwhisper-recording.wav"
+        audio_path = Path(tempfile.gettempdir()) / f"quantumscribe-recording-{job_id}-{uuid.uuid4().hex}.wav"
         try:
             # stop_and_save desliga o stream e gera o wav completo
             duration = self.recorder.stop_and_save(audio_path)
         except Exception as error:
-            self.processing = False
+            if self._is_active_transcription_job(job_id):
+                self._active_transcription_job = None
+                self.processing = False
             self.popup.show_message("Falha na gravação", str(error), error=True)
             self._schedule_popup_hide(5000)
             return
 
         # Verifica se o tempo de áudio é suficiente
         if duration < 0.25:
-            self.processing = False
+            if self._is_active_transcription_job(job_id):
+                self._active_transcription_job = None
+                self.processing = False
             self.popup.show_message("Gravação muito curta", "Tente falar por mais tempo.")
             self._schedule_popup_hide(2200)
             return
@@ -396,7 +458,7 @@ class QuantumScribeApp:
         # Executa a chamada do Whisper em segundo plano para não congelar o HUD flutuante
         self._transcription_thread = threading.Thread(
             target=self._transcribe_and_deliver,
-            args=(audio_path, self.target_window, duration, translate, auto_send),
+            args=(audio_path, self.target_window, duration, job_id, translate, auto_send),
             daemon=True,
         )
         self._transcription_thread.start()
@@ -412,19 +474,31 @@ class QuantumScribeApp:
         self.popup.hide()
         self.esc_hotkey.unregister(wait=False)
 
-        # Cancela streaming se estiver ativo
+        cancelled_capture = False
+
+        # Cancela streaming se estiver ativo. Esta rota também é usada pelo
+        # botão do HUD e pelo Esc, pois streaming não usa ``AudioRecorder``.
         if self._stream_session is not None:
             self._stream_session.cancel()
             self._stream_session = None
+            self._stream_session_id = None
+            self._stream_stopping = False
             self._stream_accumulated = []
+            cancelled_capture = True
 
         if self.recorder.is_recording:
             self.recorder.cancel()
-            if self.config.play_sounds:
-                play_cancel_sound(self.config.sound_volume)
+            cancelled_capture = True
+
+        if cancelled_capture and self.config.play_sounds:
+            play_cancel_sound(self.config.sound_volume)
 
     def cancel_transcription(self) -> None:
         """Cancela transcrição em andamento e fecha o HUD imediatamente."""
+        # Invalida o job antes de sinalizar o transcritor. A inferência nativa
+        # pode terminar cooperativamente depois, mas não pode mais tocar no HUD,
+        # no clipboard nem no estado de uma nova sessão.
+        self._active_transcription_job = None
         self.transcriber.cancel()
         if self.config.play_sounds:
             play_cancel_sound(self.config.sound_volume)
@@ -439,6 +513,7 @@ class QuantumScribeApp:
         audio_path: Path,
         target_window: WindowTarget,
         duration: float,
+        job_id: int,
         translate: bool = False,
         auto_send: bool = False,
     ) -> None:
@@ -446,17 +521,33 @@ class QuantumScribeApp:
 
         Roda inteiramente em uma thread secundária.
         """
+        self._transcription_context.job_id = job_id
         try:
+            if not self._is_active_transcription_job(job_id):
+                return
+
             title_hud = "Traduzindo…" if translate else "Transcrevendo…"
             if not self.transcriber.is_loaded():
-                self.root.after(0, self.popup.show_loading_model)
+                self._schedule_for_active_transcription_job(job_id, self.popup.show_loading_model)
                 self.transcriber.load()
-                self.root.after(0, lambda: self.popup.show_processing_with_progress(duration, title_override=title_hud))
+                self._schedule_for_active_transcription_job(
+                    job_id,
+                    lambda: self.popup.show_processing_with_progress(duration, title_override=title_hud),
+                )
             else:
-                self.root.after(0, lambda: self.popup.show_processing_with_progress(duration, title_override=title_hud))
+                self._schedule_for_active_transcription_job(
+                    job_id,
+                    lambda: self.popup.show_processing_with_progress(duration, title_override=title_hud),
+                )
 
             # Transcreve o áudio completo de uma só vez (muito mais rápido e sem bugs de picotamento)
             text = self.transcriber.transcribe(audio_path, translate=translate, duration=duration)
+
+            # Uma sessão cancelada/substituída pode terminar a inferência em
+            # segundo plano. Descartar o resultado é essencial para não inserir
+            # texto antigo no aplicativo que estiver ativo agora.
+            if not self._is_active_transcription_job(job_id):
+                return
 
             # Guarda a transcrição bruta do Whisper antes do pós-processamento
             raw_text = text or ""
@@ -551,7 +642,7 @@ class QuantumScribeApp:
             if not text or not text.strip():
                 raise RuntimeError("Nenhuma fala detectada ou transcrição cancelada.")
 
-            self.root.after(0, self.popup.complete_progress)
+            self._schedule_for_active_transcription_job(job_id, self.popup.complete_progress)
 
             # 1. Copia e/ou injeta o texto de forma eficiente
             typed = False
@@ -561,6 +652,8 @@ class QuantumScribeApp:
 
             if should_paste:
                 # type_into_window já copia para o clipboard internamente
+                if not self._is_active_transcription_job(job_id):
+                    return
                 typed = type_into_window(target_window, text)
 
                 # Se atalho de auto-envio (auto_send) foi acionado e a colagem funcionou, dá Enter
@@ -568,6 +661,8 @@ class QuantumScribeApp:
                     press_enter()
             else:
                 # Se não vai colar automaticamente, apenas copia para a área de transferência
+                if not self._is_active_transcription_job(job_id):
+                    return
                 set_clipboard_text(text)
 
             # --- Quantum Brain: salva nota se o modo estiver ativo ---
@@ -598,19 +693,22 @@ class QuantumScribeApp:
                 print(f"[Aviso] Falha ao salvar log comparativo: {log_error}")
 
             message = "Texto inserido e enviado" if (typed and auto_send) else ("Texto inserido" if typed else "Texto copiado")
-            self.root.after(0, lambda m=message: self._show_success(m))
+            self._finish_active_transcription_job(job_id, lambda m=message: self._show_success(m))
 
             # Transcrição concluída com sucesso: remove o arquivo de emergência
             from .config import app_data_dir
-            try:
-                (app_data_dir() / "emergency_audio.wav").unlink(missing_ok=True)
-            except Exception:
-                pass
+            if self._is_active_transcription_job(job_id):
+                try:
+                    (app_data_dir() / "emergency_audio.wav").unlink(missing_ok=True)
+                except Exception:
+                    pass
         except Exception as error:
             err_msg = str(error)
-            self.root.after(0, lambda e=err_msg: self._show_error(e))
+            self._finish_active_transcription_job(job_id, lambda e=err_msg: self._show_error(e))
         finally:
-            self.processing = False
+            if self._is_active_transcription_job(job_id):
+                self.processing = False
+            self._transcription_context.job_id = None
             try:
                 audio_path.unlink(missing_ok=True)
             except OSError:
@@ -630,7 +728,13 @@ class QuantumScribeApp:
 
     def _threadsafe_status(self, status: str) -> None:
         """Atualiza a mensagem de status no popup de forma assíncrona/thread-safe."""
-        if self.processing:
+        job_id = getattr(getattr(self, "_transcription_context", None), "job_id", None)
+        if job_id is not None:
+            self._schedule_for_active_transcription_job(
+                job_id,
+                lambda s=status: self.popup.set_text(s, "Processamento local"),
+            )
+        elif self.processing:
             self.root.after(0, lambda s=status: self.popup.set_text(s, "Processamento local"))
 
     def _preload_model(self) -> None:
@@ -834,21 +938,35 @@ class QuantumScribeApp:
         self.exit()
     # ---- Métodos de Streaming -----------------------------------------------
 
+    def _stream_session_is_current(self, session, session_id: int) -> bool:
+        """Evita que callbacks de uma sessão antiga alterem a sessão atual."""
+        return (
+            self._stream_session is session
+            and self._stream_session_id == session_id
+            and self._recording_session == session_id
+        )
+
     def _start_streaming(self) -> None:
         """Inicia uma sessão de streaming contínuo."""
         from .stream_transcriber import StreamTranscriber
 
         self.processing = True
+        self._recording_session += 1
+        session_id = self._recording_session
+        self._cancel_confirmation_pending_session = None
+        self._stream_stopping = False
         self._stream_accumulated = []
         self._stream_target_window = self.target_window
         self._stream_auto_send = self._active_auto_send
 
-        self._stream_session = StreamTranscriber(
+        session = StreamTranscriber(
             config=self.config,
-            on_chunk_text=self._on_stream_chunk,
-            on_status=self._threadsafe_status,
+            on_chunk_text=lambda text: self._on_stream_chunk(session_id, text),
+            on_status=lambda status: self._threadsafe_stream_status(session, session_id, status),
             on_error=lambda e: print(f"[Stream] Erro: {e}"),
         )
+        self._stream_session = session
+        self._stream_session_id = session_id
 
         device_index = self.get_configured_device_index()
 
@@ -856,16 +974,24 @@ class QuantumScribeApp:
             play_start_sound(self.config.sound_volume)
 
         # Registra ESC para cancelar
-        self.esc_hotkey.register()
+        self.esc_hotkey.register(session_id)
 
         # Inicia o streaming em thread separada para não bloquear o HUD
         def _do_start():
+            if not self._stream_session_is_current(session, session_id) or self._stream_stopping:
+                return
             try:
-                self._stream_session.start(self.transcriber, device_index=device_index)
+                session.start(self.transcriber, device_index=device_index)
             except Exception as e:
-                self.root.after(0, lambda err=str(e): self._show_error(err))
-                self.processing = False
-                self._stream_session = None
+                self.root.after(
+                    0,
+                    lambda err=str(e): self._finish_stream_start_error(session, session_id, err),
+                )
+                return
+            # O cancelamento pode acontecer enquanto o VAD ou o InputStream é
+            # preparado. Encerrar a referência local impede iniciar captura sem HUD.
+            if not self._stream_session_is_current(session, session_id) or self._stream_stopping:
+                session.cancel()
 
         threading.Thread(target=_do_start, daemon=True).start()
 
@@ -873,13 +999,37 @@ class QuantumScribeApp:
         self.popup.show_recording(theme=self.config.hud_theme, color=self.config.atom_color)
         self.popup.set_text("Streaming…", "Ctrl+Space para finalizar • Transcrição contínua")
 
+    def _finish_stream_start_error(self, session, session_id: int, error: str) -> None:
+        if not self._stream_session_is_current(session, session_id):
+            return
+        session.cancel()
+        self._stream_session = None
+        self._stream_session_id = None
+        self._stream_stopping = False
+        self.processing = False
+        self.esc_hotkey.unregister(wait=False)
+        self._show_error(error)
+
+    def _threadsafe_stream_status(self, session, session_id: int, status: str) -> None:
+        if not self._stream_session_is_current(session, session_id) or self._stream_stopping:
+            return
+
+        def update() -> None:
+            if self._stream_session_is_current(session, session_id) and not self._stream_stopping:
+                self.popup.set_text(status, "Transcrição contínua")
+
+        self.root.after(0, update)
+
     def _stop_streaming(self, auto_send: bool = False) -> None:
         """Para o streaming e entrega o texto acumulado."""
-        if self._stream_session is None:
+        if self._stream_session is None or self._stream_stopping:
             return
 
         session = self._stream_session
-        self._stream_session = None
+        session_id = self._stream_session_id
+        if session_id is None:
+            return
+        self._stream_stopping = True
         self.esc_hotkey.unregister()
 
         self.popup.set_text("Finalizando…", "Processando último chunk")
@@ -892,8 +1042,16 @@ class QuantumScribeApp:
                 # Para o stream e aguarda últimos chunks
                 full_text = session.stop()
 
+                if not self._stream_session_is_current(session, session_id):
+                    return
+
                 if not full_text or not full_text.strip():
-                    self.root.after(0, lambda: self._show_error("Nenhuma fala detectada."))
+                    self.root.after(
+                        0,
+                        lambda: self._finish_stream_error(
+                            session, session_id, "Nenhuma fala detectada."
+                        ),
+                    )
                     return
 
                 # Salva no diário
@@ -920,27 +1078,52 @@ class QuantumScribeApp:
                 message = "Texto inserido e enviado" if (typed and do_auto_send) else (
                     "Texto inserido" if typed else "Texto copiado"
                 )
-                self.root.after(0, lambda m=message: self._show_success(m))
+                self.root.after(
+                    0,
+                    lambda m=message: self._finish_stream_success(session, session_id, m),
+                )
             except Exception as e:
-                self.root.after(0, lambda err=str(e): self._show_error(err))
-            finally:
-                self.processing = False
+                self.root.after(
+                    0,
+                    lambda err=str(e): self._finish_stream_error(session, session_id, err),
+                )
 
         threading.Thread(target=_finalize, daemon=True).start()
 
-    def _on_stream_chunk(self, chunk_text: str) -> None:
+    def _finish_stream_success(self, session, session_id: int, message: str) -> None:
+        if not self._stream_session_is_current(session, session_id):
+            return
+        self._stream_session = None
+        self._stream_session_id = None
+        self._stream_stopping = False
+        self.processing = False
+        self._show_success(message)
+
+    def _finish_stream_error(self, session, session_id: int, error: str) -> None:
+        if not self._stream_session_is_current(session, session_id):
+            return
+        self._stream_session = None
+        self._stream_session_id = None
+        self._stream_stopping = False
+        self.processing = False
+        self._show_error(error)
+
+    def _on_stream_chunk(self, session_id: int, chunk_text: str) -> None:
         """Callback chamado quando um chunk do streaming foi transcrito.
 
         Atualiza o HUD com preview do texto acumulado.
         """
+        if self._stream_session_id != session_id or self._stream_stopping:
+            return
         self._stream_accumulated.append(chunk_text)
         count = len(self._stream_accumulated)
         preview = chunk_text[:50] + ("…" if len(chunk_text) > 50 else "")
         self.root.after(
             0,
-            lambda p=preview, n=count: self.popup.set_text(
-                f"Chunk {n} pronto",
-                f"\"{p}\"",
+            lambda p=preview, n=count, sid=session_id: (
+                self.popup.set_text(f"Chunk {n} pronto", f"\"{p}\"")
+                if self._stream_session_id == sid and not self._stream_stopping
+                else None
             ),
         )
 
@@ -1008,6 +1191,11 @@ class QuantumScribeApp:
             pid_file.unlink(missing_ok=True)
         except Exception:
             pass
+        if self._stream_session is not None:
+            self._stream_session.cancel()
+            self._stream_session = None
+            self._stream_session_id = None
+            self._stream_stopping = False
         self.esc_hotkey.unregister()
         self.recorder.cancel()
         self._unregister_all_hotkeys()

@@ -8,6 +8,7 @@ a amplitude do volume em tempo real para alimentar a animação do HUD.
 from __future__ import annotations
 
 import threading
+import time
 import wave
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -19,6 +20,61 @@ if TYPE_CHECKING:
 
 SAMPLE_RATE = 16_000  # Taxa de amostragem ideal exigida pelo modelo Whisper (16kHz)
 CHANNELS = 1          # Captura apenas canal Mono
+
+
+def _prefer_wasapi_input(device_index: int | None) -> tuple[int | None, object | None]:
+    """Seleciona a duplicata WASAPI de menor latência no Windows, quando houver.
+
+    Dispositivos virtuais como o NVIDIA Broadcast aparecem primeiro via MME,
+    cuja latência padrão pode ser muito maior. A configuração ``auto_convert``
+    permite manter a taxa de 16 kHz exigida pelo Whisper sem reamostragem no
+    callback do aplicativo. O chamador deve manter fallback para o dispositivo
+    original caso o driver não aceite a abertura.
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return device_index, None
+
+    try:
+        import sounddevice as sd
+
+        devices = sd.query_devices()
+        hostapis = sd.query_hostapis()
+        source_index = device_index if device_index is not None else sd.default.device[0]
+        if source_index is None or source_index < 0 or source_index >= len(devices):
+            return device_index, None
+
+        source = devices[source_index]
+        source_name = str(source.get("name", "")).casefold()
+        source_hostapi = hostapis[source["hostapi"]]["name"]
+        if "wasapi" in str(source_hostapi).casefold():
+            return device_index, None
+
+        for index, candidate in enumerate(devices):
+            if candidate.get("max_input_channels", 0) <= 0:
+                continue
+            if str(candidate.get("name", "")).casefold() != source_name:
+                continue
+            hostapi_name = str(hostapis[candidate["hostapi"]]["name"])
+            if "wasapi" not in hostapi_name.casefold():
+                continue
+
+            extra_settings = sd.WasapiSettings(auto_convert=True)
+            sd.check_input_settings(
+                device=index,
+                channels=CHANNELS,
+                dtype="int16",
+                samplerate=SAMPLE_RATE,
+                extra_settings=extra_settings,
+            )
+            return index, extra_settings
+    except Exception:
+        # O suporte WASAPI/auto-convert depende do driver. O fluxo normal de
+        # MME continua sendo a alternativa segura em caso de qualquer falha.
+        pass
+
+    return device_index, None
 
 
 def get_input_devices() -> list[dict]:
@@ -117,6 +173,7 @@ class AudioRecorder:
         self._max_seconds = 0.0
         self._recorded_seconds = 0.0
         self._on_limit_reached = None
+        self._ignore_audio_until = 0.0
 
     @property
     def is_recording(self) -> bool:
@@ -135,7 +192,8 @@ class AudioRecorder:
         self,
         device_index: int | None = None,
         max_seconds: float = 0.0,
-        on_limit_reached: Callable[[], None] | None = None
+        on_limit_reached: Callable[[], None] | None = None,
+        ignore_audio_seconds: float = 0.0,
     ) -> None:
         """Inicia o fluxo de entrada de áudio do microfone especificado de forma assíncrona.
 
@@ -149,16 +207,45 @@ class AudioRecorder:
             self._max_seconds = max_seconds
             self._recorded_seconds = 0.0
             self._on_limit_reached = on_limit_reached
+            self._ignore_audio_until = time.monotonic() + max(0.0, ignore_audio_seconds)
 
         import sounddevice as sd
-        self._stream = sd.InputStream(
-            device=device_index,
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype="int16",
-            callback=self._callback,
-        )
-        self._stream.start()
+
+        preferred_device, extra_settings = _prefer_wasapi_input(device_index)
+        stream_kwargs = {
+            "device": preferred_device,
+            "samplerate": SAMPLE_RATE,
+            "channels": CHANNELS,
+            "dtype": "int16",
+            "callback": self._callback,
+        }
+        if extra_settings is not None:
+            stream_kwargs["extra_settings"] = extra_settings
+
+        try:
+            self._stream = sd.InputStream(**stream_kwargs)
+            self._stream.start()
+        except Exception:
+            failed_stream = self._stream
+            self._stream = None
+            if failed_stream is not None:
+                try:
+                    failed_stream.close()
+                except Exception:
+                    pass
+            if preferred_device == device_index and extra_settings is None:
+                raise
+
+            # Alguns drivers virtuais expõem WASAPI para consulta, mas não para
+            # captura em todas as configurações. Reabre pelo caminho original.
+            self._stream = sd.InputStream(
+                device=device_index,
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype="int16",
+                callback=self._callback,
+            )
+            self._stream.start()
 
     def stop_and_save(self, path: Path) -> float:
         """Interrompe a gravação e exporta as ondas acumuladas para um arquivo WAV de 16 bits.
@@ -242,6 +329,8 @@ class AudioRecorder:
         da onda sonora para medir a intensidade real da fala humana.
         """
         del time_info
+        if time.monotonic() < self._ignore_audio_until:
+            return
         if status.input_overflow:
             return
 

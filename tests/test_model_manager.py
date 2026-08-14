@@ -31,14 +31,14 @@ def _write_complete_snapshot(cache_dir, model_name="medium"):
 def test_clean_install_downloads_medium_into_whisper_cache(isolated_appdata):
     calls = []
 
-    def fake_download(model_name, *, cache_dir):
-        calls.append((model_name, cache_dir))
+    def fake_download(model_name, *, cache_dir, revision):
+        calls.append((model_name, cache_dir, revision))
         _write_complete_snapshot(isolated_appdata, model_name)
         return str(isolated_appdata)
 
     ensure_model_downloaded("medium", downloader=fake_download)
 
-    assert calls == [("medium", str(isolated_appdata))]
+    assert calls == [("medium", str(isolated_appdata), MODEL_REVISIONS["medium"])]
     assert is_model_downloaded("medium") is True
 
 
@@ -72,9 +72,10 @@ def test_interrupted_download_is_resumed(isolated_appdata):
     (partial / "config.json").write_text("{}", encoding="utf-8")
     calls = 0
 
-    def resume_download(model_name, *, cache_dir):
+    def resume_download(model_name, *, cache_dir, revision):
         nonlocal calls
         calls += 1
+        assert revision == MODEL_REVISIONS[model_name]
         _write_complete_snapshot(isolated_appdata, model_name)
         return cache_dir
 
@@ -107,9 +108,10 @@ def test_simultaneous_first_use_downloads_only_once(isolated_appdata):
     calls = 0
     errors = []
 
-    def slow_download(model_name, *, cache_dir):
+    def slow_download(model_name, *, cache_dir, revision):
         nonlocal calls
         calls += 1
+        assert revision == MODEL_REVISIONS[model_name]
         time.sleep(0.05)
         _write_complete_snapshot(isolated_appdata, model_name)
         return cache_dir
