@@ -1,0 +1,26 @@
+story_id: '2.3'
+story_title: 'Alinhar os limites de qualidade após a instalação do AIOX'
+gate: PASS
+status_reason: 'A configuração Ruff separa framework/projeções do produto; todos os acceptance criteria foram verificados no checkout limpo.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'working-tree-digest:d638868d333a18b8c08e445c3d379569285f731514a7d014c332118819f7783f'
+updated: '2026-08-18T14:55:00-03:00'
+top_issues: []
+quality_score: 100
+ac_coverage:
+  '1': PASS
+  '2': PASS
+  '3': PASS
+  '4': PASS
+  '5': PASS
+gaps: []
+risk_summary:
+  critical: 0
+  high: 0
+  medium: 0
+  low: 1
+nfr_validation:
+  security: PASS
+  performance: PASS
+  reliability: PASS
+  maintainability: PASS

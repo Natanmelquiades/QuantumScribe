@@ -1,0 +1,13 @@
+{
+  "story_id": "2.3",
+  "status": "GO",
+  "score": 9,
+  "confidence": "high",
+  "validated_by": "@po (Pax)",
+  "date": "2026-08-18",
+  "transition": "Draft -> Ready",
+  "code_intelligence": "skipped: runtime unavailable",
+  "critical_issues": [],
+  "should_fix": [],
+  "coverage": [1, 2, 3, 4, 5]
+}
