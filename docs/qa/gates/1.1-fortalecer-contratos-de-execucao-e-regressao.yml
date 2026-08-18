@@ -1,0 +1,16 @@
+schema: 1
+story: "1.1"
+gate: PASS
+status_reason: "Todos os 9 critérios de aceite foram verificados; a regressão, os gates estáticos e a auditoria de dependências passaram sem issue crítica ou alta."
+reviewer: "Quinn"
+reviewed_revision: "working-tree-digest:3101f3c8b80541d145b48ee242e48a320c9f608b8a6618a3d0792bebb51396f0"
+updated: "2026-08-18T03:53:58-03:00"
+top_issues: []
+waiver:
+  active: false
+evidence:
+  tests: "141 passed, 1 skipped"
+  coverage: "contracts.py 100%; audio_enhancer.py 52%; config.py 80%; total 32% baseline project coverage"
+  quality_gates: "ruff, compileall, pip check and pip-audit passed"
+  code_rabbit: "Unavailable: WSL returned /bin/sh: bash: not found; manual review completed"
+  code_intel: "Unavailable in this runtime; manual blast-radius review completed"

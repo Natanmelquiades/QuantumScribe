@@ -1,0 +1,30 @@
+{
+  "story_id": "1.3",
+  "story_path": "docs/stories/1.3.story.md",
+  "mode": "yolo",
+  "readiness": "READY",
+  "clarity_score": 9,
+  "categories": {
+    "goal_context": "PASS",
+    "technical_guidance": "PASS",
+    "references": "PASS",
+    "self_containment": "PASS",
+    "testing": "PASS",
+    "coderabbit": "PASS"
+  },
+  "evidence": {
+    "acceptance_criteria": 10,
+    "task_groups": 5,
+    "source_references": 16,
+    "previous_stories": "1.1 and 1.2 Done with QA PASS",
+    "code_intelligence": "unavailable; manual duplicate/path review completed",
+    "clickup": "unavailable; local story is source of truth"
+  },
+  "notes": [
+    "The first extraction is limited to lifecycle/session identity and stale-result protection.",
+    "Git recovery and protected cleanup remain non-destructive and owner-gated.",
+    "Documentation paths match core-config.yaml devLoadAlwaysFiles and frameworkDocsLocation."
+  ],
+  "next_agent": "@dev",
+  "next_command": "*develop 1.3"
+}

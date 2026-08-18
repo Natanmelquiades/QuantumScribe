@@ -1,0 +1,46 @@
+schema: 1
+story: "1.2"
+story_title: "Separar Core, componentes opcionais e release reproduzível"
+gate: PASS
+status_reason: "Os manifestos, builds, inventário, componentes e workflow foram verificados; a suíte e os gates de segurança passaram sem issue alta ou crítica."
+reviewer: "Quinn (Test Architect)"
+reviewed_revision: "working-tree-digest:af8d77ac63a573939efe07e6f0d5cbef4b146481b545e4e52d81d33e668e09ad"
+updated: "2026-08-18T04:18:29-03:00"
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: "2026-09-01T04:18:29-03:00"
+evidence:
+  tests_reviewed: 150
+  risks_identified: 1
+  tests: "150 passed, 1 skipped"
+  build_windows: "PyInstaller 6.21.0 / Python 3.12.13; Core 219.354 MB, 1326 arquivos, inventário aprovado"
+  build_linux: "Não executado neste host Windows por ausência de Bash/WSL funcional; workflow Ubuntu com lock e smoke equivalentes preparado"
+  quality_gates: "Ruff, compileall, pip check e pip-audit dos perfis Core/CUDA/VAD passaram"
+  security_scan: "8 padrões revisados; nenhum achado crítico ou alto"
+  code_rabbit: "Indisponível: WSL retornou /bin/sh: bash: not found; revisão manual concluída"
+  code_intel: "Indisponível nesta sessão; revisão manual de impacto e referências concluída"
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ac_gaps: []
+nfr_validation:
+  security:
+    status: PASS
+    notes: "Locks com hashes, ações fixadas por SHA, permissões mínimas, inventário de proibidos e validação de ZIP com path traversal."
+  performance:
+    status: PASS
+    notes: "Bundle Windows medido em 219.354 MB, abaixo do limite de 250 MB; VAD/ONNX Runtime não foram coletados no Core."
+  reliability:
+    status: PASS
+    notes: "Build/publish separados, checksums consolidados, fallback CPU preservado e falhas de validação bloqueiam publicação."
+  maintainability:
+    status: PASS
+    notes: "Perfis canônicos, aliases explícitos, inventário stdlib-only, testes determinísticos e procedimento de release documentado."
+recommendations:
+  immediate: []
+  future:
+    - action: "Adicionar SBOM/attestation ao job publish quando uma ferramenta aprovada estiver disponível."
+      refs: [".github/workflows/release.yml", "docs/guides/release-procedure.md"]
+    - action: "Executar e anexar evidência do build Linux em um runner Ubuntu antes da primeira release pública."
+      refs: ["build_linux.sh", ".github/workflows/release.yml"]

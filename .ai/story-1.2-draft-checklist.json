@@ -1,0 +1,35 @@
+{
+  "story_id": "1.2",
+  "story_path": "docs/stories/1.2.story.md",
+  "mode": "yolo",
+  "readiness": "READY",
+  "clarity_score": 9,
+  "categories": {
+    "goal_context": "PASS",
+    "technical_guidance": "PASS",
+    "references": "PASS",
+    "self_containment": "PASS",
+    "testing": "PASS",
+    "coderabbit": "PASS"
+  },
+  "evidence": {
+    "acceptance_criteria": 10,
+    "task_groups": 7,
+    "test_scenarios": 11,
+    "previous_story": "1.1 Done with QA PASS",
+    "core_sources": [
+      "docs/prd/epic-1-quantumscribe-auditoria-estabilizacao.md",
+      "docs/PRD_CORE_LEVE_COMPONENTES_SOB_DEMANDA.md",
+      "docs/architecture.md"
+    ],
+    "code_intelligence": "unavailable; manual duplicate/path review completed",
+    "clickup": "unavailable; local story is source of truth"
+  },
+  "notes": [
+    "The story keeps onboarding, optional-component UI, backup removal and structural refactoring out of scope.",
+    "Clean build evidence is required before implementation can be considered complete.",
+    "docs/framework/* remains absent and is explicitly documented as a follow-up."
+  ],
+  "next_agent": "@po",
+  "next_command": "*validate-story-draft 1.2"
+}

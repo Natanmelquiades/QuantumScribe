@@ -1,0 +1,59 @@
+schema: 1
+story: '1.3'
+story_title: 'Modularizar o núcleo e fechar a governança de manutenção'
+gate: PASS
+status_reason: 'A documentação, o mapa determinístico, as fronteiras e o seam de lifecycle foram entregues com regressão aprovada. Não foram encontrados problemas CRITICAL/HIGH; limitações de CodeRabbit, Linux local e lint do framework estão documentadas como não bloqueantes.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'working-tree-digest:c142583e710e50b3f53debf04f85c7a43adb83930660fdb85aebf8438ed69063'
+updated: '2026-08-18T04:35:11-03:00'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: '2026-09-01T04:35:11-03:00'
+
+evidence:
+  tests_reviewed: 158
+  risks_identified: 2
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    ac_gaps: []
+  automated:
+    pytest: '158 passed, 1 skipped'
+    ruff: 'PASS on localwhisper tests scripts'
+    compileall: 'PASS on localwhisper scripts tests'
+    pip_check: 'PASS'
+    pip_audit: 'PASS for requirements-core.lock; no vulnerabilities reported'
+    radon: 'PASS; 503 blocks, average A (3.94), E/F baseline documented'
+    import_map: 'PASS; deterministic output matches docs/architecture/dependency-map.md; no cycles'
+    code_intelligence: 'N/A; provider unavailable'
+    coderabbit: 'N/A; Windows host has no bash/WSL executable'
+  security_scan:
+    patterns_checked: 8
+    critical: 0
+    high: 0
+    result: 'PASS; no dynamic execution, shell injection, secrets, SQL/CORS/XSS pattern or heavy import in session_controller'
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Session seam uses only stdlib; Git recovery and cleanup are explicitly non-destructive and owner-gated.'
+  performance:
+    status: PASS
+    notes: 'Controller is lightweight, adds no runtime dependency and does not change the transcription pipeline.'
+  reliability:
+    status: PASS
+    notes: 'Current/stale/cancelled jobs, final callback retirement and compatibility facade are covered by tests.'
+  maintainability:
+    status: PASS
+    notes: 'Canonical framework docs, boundaries, deterministic dependency map, ADRs and complexity plan are present.'
+
+recommendations:
+  immediate: []
+  future:
+    - action: 'Executar build/smoke Linux em runner nativo ou CI Linux; o host local não possui bash/WSL.'
+      refs: ['build_linux.sh', '.github/workflows/release.yml']
+    - action: 'Limpar os avisos de Ruff existentes no framework/projeções AIOX em story própria, sem misturar com o produto.'
+      refs: ['.aiox-core/monitor/hooks', '.claude/skills']
+    - action: 'Extrair delivery.py e reduzir a complexidade de _transcribe_and_deliver em story própria, preservando a fachada.'
+      refs: ['localwhisper/app.py', 'docs/architecture/complexity-baseline.md']

@@ -1,0 +1,29 @@
+id,name,archetype,icon,version,status,file_path,when_to_use
+aiox-master,Orion,Orchestrator,👑,2.1.0,active,.aiox-core/development/agents/aiox-master.md,"Use when you need comprehensive expertise across all domains, framework component creation/modification, workflow orchestration, or running tasks that don't require a specialized persona."
+analyst,Atlas,Decoder,🔍,2.1.0,active,.aiox-core/development/agents/analyst.md,"Use for market research, competitive analysis, user research, brainstorming session facilitation, structured ideation workshops, feasibility studies, industry trends analysis, project discovery (brownfield documentation), and research report creation.
+
+NOT for: PRD creation or product strategy → Use @pm. Technical architecture decisions or technology selection → Use @architect. Story creation or sprint planning → Use @sm.
+"
+architect,Aria,Visionary,🏛️,2.1.0,active,.aiox-core/development/agents/architect.md,"Use for system architecture (fullstack, backend, frontend, infrastructure), technology stack selection (technical evaluation), API design (REST/GraphQL/tRPC/WebSocket), security architecture, performance optimization, deployment strategy, and cross-cutting concerns (logging, monitoring, error handling).
+
+NOT for: Market research or competitive analysis → Use @analyst. PRD creation or product strategy → Use @pm. Database schema design or query optimization → Use @data-engineer.
+"
+data-engineer,Dara,Sage,📊,2.1.0,active,.aiox-core/development/agents/data-engineer.md,"Use for database design, schema architecture, Supabase configuration, RLS policies, migrations, query optimization, data modeling, operations, and monitoring"
+dev,Dex,Builder,💻,2.1.0,active,.aiox-core/development/agents/dev.md,"Use for code implementation, debugging, refactoring, and development best practices"
+devops,Gage,Operator,⚡,2.1.0,active,.aiox-core/development/agents/devops.md,"Use for repository operations, version management, CI/CD, quality gates, and GitHub push operations. ONLY agent authorized to push to remote repository."
+pm,Morgan,Strategist,📋,2.1.0,active,.aiox-core/development/agents/pm.md,"Use for PRD creation (greenfield and brownfield), epic creation and management, product strategy and vision, feature prioritization (MoSCoW, RICE), roadmap planning, business case development, go/no-go decisions, scope definition, success metrics, and stakeholder communication.
+
+Epic/Story Delegation (Gate 1 Decision): PM creates epic structure, then delegates story creation to @sm.
+
+NOT for: Market research or competitive analysis → Use @analyst. Technical architecture design or technology selection → Use @architect. Detailed user story creation → Use @sm (PM creates epics, SM creates stories). Implementation work → Use @dev.
+"
+po,Pax,Balancer,🎯,2.1.0,active,.aiox-core/development/agents/po.md,"Use for backlog management, story refinement, acceptance criteria, sprint planning, and prioritization decisions"
+qa,Quinn,Guardian,✅,2.1.0,active,.aiox-core/development/agents/qa.md,"Use for comprehensive test architecture review, quality gate decisions, and code improvement. Provides thorough analysis including requirements traceability, risk assessment, and test strategy. Advisory only - teams choose their quality bar."
+sm,River,Facilitator,🌊,2.1.0,active,.aiox-core/development/agents/sm.md,"Use for user story creation from PRD, story validation and completeness checking, acceptance criteria definition, story refinement, sprint planning, backlog grooming, retrospectives, daily standup facilitation, and local branch management (create/switch/list/delete local branches, local merges).
+
+Epic/Story Delegation (Gate 1 Decision): PM creates epic structure, SM creates detailed user stories from that epic.
+
+NOT for: PRD creation or epic structure → Use @pm. Market research or competitive analysis → Use @analyst. Technical architecture design → Use @architect. Implementation work → Use @dev. Remote Git operations (push, create PR, merge PR, delete remote branches) → Use @github-devops.
+"
+squad-creator,Craft,Builder,🏗️,2.1.0,active,.aiox-core/development/agents/squad-creator.md,"Use to create, validate, publish and manage squads"
+ux-design-expert,Uma,Empathizer,🎨,2.1.0,active,.aiox-core/development/agents/ux-design-expert.md,"Complete design workflow - user research, wireframes, design systems, token extraction, component building, and quality assurance"

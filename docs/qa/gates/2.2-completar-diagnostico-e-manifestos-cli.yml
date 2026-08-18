@@ -1,0 +1,62 @@
+schema: 1
+story: '2.2'
+story_title: 'Completar os comandos de diagnóstico e manifestos do CLI'
+gate: PASS
+status_reason: 'Todos os acceptance criteria foram verificados. O CLI, Doctor, registry e manifestos passam, sem falhas CRITICAL/HIGH; os dois avisos restantes são ambientais/advisórios e não bloqueiam a entrega local.'
+reviewer: 'Quinn (Test Architect)'
+reviewed_revision: 'working-tree-digest:4e0fd17e310a8ce4609b98298ed83715431c93ef53e14e8989050063719096c0'
+updated: '2026-08-18T14:30:00-03:00'
+top_issues: []
+waiver:
+  active: false
+quality_score: 100
+expires: '2026-09-01T14:30:00-03:00'
+
+evidence:
+  tests_reviewed: 159
+  risks_identified: 4
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6]
+    ac_gaps: []
+  automated:
+    cli_smoke: 'PASS; verify-cli-integrity.js covers version, help, doctor, manifest and config'
+    doctor: 'PASS; 16 PASS, 2 WARN advisory, 0 FAIL'
+    registry: 'PASS; 401 workers, 6/6 registry checks'
+    manifests: 'PASS; agents=12, workers=401, tasks=213'
+    workflows: 'PASS; 14 valid, 0 warnings'
+    agent_flow: 'PASS; 12 greetings and 12 activation pipelines'
+    ide_sync: 'PASS; 12/12 Codex agents and 12/12 skills without drift'
+    pytest: '158 passed, 1 skipped (Linux-only test on Windows)'
+    ruff: 'PASS'
+    compileall: 'PASS'
+    pip_check: 'PASS'
+    pip_audit: 'PASS; no known vulnerabilities'
+    pnpm_audit: 'PASS; no known vulnerabilities'
+    coderabbit: 'N/A; Windows host has WSL but no bash/CodeRabbit executable'
+  security_scan:
+    patterns_checked: 8
+    critical: 0
+    high: 0
+    result: 'PASS; no blocking dynamic execution, secret, injection or unsafe input pattern introduced'
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'CLI options are typed by Commander; no dynamic execution or secrets added; dependency audits are clean.'
+  performance:
+    status: PASS
+    notes: 'Registry load measured at 1ms and the local smoke test completes without new runtime dependencies.'
+  reliability:
+    status: PASS
+    notes: 'Doctor and manifest commands return deterministic exit codes and validate the generated artifacts.'
+  maintainability:
+    status: PASS
+    notes: 'Existing AIOX Doctor/Manifest modules are reused; stale registry paths and duplicate IDs are generated safely.'
+
+recommendations:
+  immediate: []
+  future:
+    - action: 'Adicionar .husky somente se o projeto passar a adotar hooks Git locais.'
+      refs: ['.aiox-core/core/doctor/checks/git-hooks.js']
+    - action: 'Executar CodeRabbit em um host com bash/WSL e o CLI autenticado.'
+      refs: ['.aiox-core/core-config.yaml#coderabbit_integration']

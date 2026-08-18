@@ -50,44 +50,6 @@ quantum_brain/
 Thumbs.db
 desktop.ini
 
-.venv-build/
-.venv-build-core/
-.component-build/
-venv/
-env/
-
-# Generated builds and local experiments
-build/
-dist/
-backups/
-temp_test/
-installer/generated_uninstall_files.nsh
-*.zip
-*.log
-*.wav
-
-# Models and user data
-models/
-.env
-.env.*
-!.env.example
-config.json
-**/config.json
-!config.example.json
-diary/
-quantum_brain/
-*.pem
-*.pfx
-*.key
-
-# Editors and OS
-.idea/
-.vscode/
-.agents/
-.DS_Store
-Thumbs.db
-desktop.ini
-
 # Historical build files
 LocalWhisper.spec.bak
 
@@ -97,3 +59,23 @@ docs/AUDITORIA_PUBLICACAO_*.md
 # Keep the official PyInstaller recipes tracked.
 !QuantumScribe.spec
 !QuantumScribe-Linux.spec
+
+# Environment & Secrets (AIOX)
+.env.local
+.env.*.local
+
+# Dependencies (AIOX)
+node_modules/
+node_modules
+
+# Build & Logs (AIOX)
+logs/
+tmp/
+
+# IDE & OS (AIOX)
+*.swp
+
+# AIOX Local (AIOX)
+.aiox-core/local/
+.claude/settings.local.json
+.aiox/install-log.txt

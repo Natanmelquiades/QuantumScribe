@@ -1,0 +1,402 @@
+id,name,category,subcategory,executor_types,tags,file_path,status
+accessibility-wcag-checklist,Accessibility Wcag Checklist,checklist,quality,Agent,checklist;quality;accessibility;wcag;validation,.aiox-core/product/checklists/accessibility-wcag-checklist.md,active
+architect-checklist,Architect Checklist,checklist,quality,Agent,checklist;quality;architect;validation,.aiox-core/product/checklists/architect-checklist.md,active
+change-checklist,Change Checklist,checklist,quality,Agent,checklist;quality;change;validation,.aiox-core/product/checklists/change-checklist.md,active
+component-quality-checklist,Component Quality Checklist,checklist,quality,Agent,checklist;quality;component;validation;product,.aiox-core/product/checklists/component-quality-checklist.md,active
+database-design-checklist,Database Design Checklist,checklist,quality,Agent,checklist;quality;database;design;validation,.aiox-core/product/checklists/database-design-checklist.md,active
+dba-predeploy-checklist,Dba Predeploy Checklist,checklist,quality,Agent,checklist;quality;dba;predeploy;database;validation,.aiox-core/product/checklists/dba-predeploy-checklist.md,active
+dba-rollback-checklist,Dba Rollback Checklist,checklist,quality,Agent,checklist;quality;dba;rollback;database;validation,.aiox-core/product/checklists/dba-rollback-checklist.md,active
+migration-readiness-checklist,Migration Readiness Checklist,checklist,quality,Agent,checklist;quality;migration;readiness;validation,.aiox-core/product/checklists/migration-readiness-checklist.md,active
+pattern-audit-checklist,Pattern Audit Checklist,checklist,quality,Agent,checklist;quality;pattern;audit;validation;analysis,.aiox-core/product/checklists/pattern-audit-checklist.md,active
+pm-checklist,Pm Checklist,checklist,quality,Agent,checklist;quality;validation,.aiox-core/product/checklists/pm-checklist.md,active
+po-master-checklist,Po Master Checklist,checklist,quality,Agent,checklist;quality;master;validation;product,.aiox-core/product/checklists/po-master-checklist.md,active
+pre-push-checklist,Pre Push Checklist,checklist,quality,Agent,checklist;quality;pre;push;validation,.aiox-core/product/checklists/pre-push-checklist.md,active
+release-checklist,Release Checklist,checklist,quality,Agent,checklist;quality;release;validation,.aiox-core/product/checklists/release-checklist.md,active
+self-critique-checklist,Self Critique Checklist,checklist,quality,Agent,checklist;quality;self;critique;validation,.aiox-core/product/checklists/self-critique-checklist.md,active
+story-dod-checklist,Story Dod Checklist,checklist,quality,Agent,checklist;quality;story;dod;validation;product,.aiox-core/product/checklists/story-dod-checklist.md,active
+story-draft-checklist,Story Draft Checklist,checklist,quality,Agent,checklist;quality;story;draft;validation;product,.aiox-core/product/checklists/story-draft-checklist.md,active
+agent-config-requirements,Agent Config Requirements,data,configuration,Agent,data;configuration;agent;config;requirements,.aiox-core/data/agent-config-requirements.yaml,active
+aiox-kb,Aiox Kb,data,knowledge,Agent,data;knowledge;aiox,.aiox-core/data/aiox-kb.md,active
+angular-nestjs,Angular Nestjs,data,knowledge,Agent,data;knowledge;angular;nestjs,.aiox-core/data/tech-presets/angular-nestjs.md,active
+csharp,Csharp,data,knowledge,Agent,data;knowledge;csharp,.aiox-core/data/tech-presets/csharp.md,active
+entity-registry,Entity Registry,data,configuration,Agent,data;configuration;entity;registry,.aiox-core/data/entity-registry.yaml,active
+go,Go,data,knowledge,Agent,data;knowledge,.aiox-core/data/tech-presets/go.md,active
+java,Java,data,knowledge,Agent,data;knowledge;java,.aiox-core/data/tech-presets/java.md,active
+learned-patterns,Learned Patterns,data,configuration,Agent,data;configuration;learned;patterns,.aiox-core/data/learned-patterns.yaml,active
+mcp-tool-examples,Mcp Tool Examples,data,configuration,Agent,data;configuration;mcp;tool;examples,.aiox-core/data/mcp-tool-examples.yaml,active
+nextjs-react,Nextjs React,data,knowledge,Agent,data;knowledge;nextjs;react,.aiox-core/data/tech-presets/nextjs-react.md,active
+php,Php,data,knowledge,Agent,data;knowledge;php,.aiox-core/data/tech-presets/php.md,active
+rust,Rust,data,knowledge,Agent,data;knowledge;rust,.aiox-core/data/tech-presets/rust.md,active
+technical-preferences,Technical Preferences,data,knowledge,Agent,data;knowledge;technical;preferences,.aiox-core/data/technical-preferences.md,active
+template,Template,data,knowledge,Agent,data;knowledge;template,.aiox-core/data/tech-presets/_template.md,active
+tool-registry,Tool Registry,data,configuration,Agent,data;configuration;tool;registry,.aiox-core/data/tool-registry.yaml,active
+workflow-chains,Workflow Chains,data,configuration,Agent,data;configuration;workflow;chains,.aiox-core/data/workflow-chains.yaml,active
+workflow-patterns,Workflow Patterns,data,configuration,Agent,data;configuration;workflow;patterns,.aiox-core/data/workflow-patterns.yaml,active
+workflow-state-schema,Workflow State Schema,data,configuration,Agent,data;configuration;workflow;state;schema,.aiox-core/data/workflow-state-schema.yaml,active
+agent-parser,Agent Parser,script,utility,CLI;Script,script;utility;agent;parser,.aiox-core/infrastructure/scripts/ide-sync/agent-parser.js,active
+aiox-validator,Aiox Validator,script,validation,CLI;Script,script;validation;aiox;validator,.aiox-core/infrastructure/scripts/aiox-validator.js,active
+antigravity,Antigravity,script,utility,CLI;Script,script;utility;antigravity,.aiox-core/infrastructure/scripts/ide-sync/transformers/antigravity.js,active
+approach-manager,Approach Manager,script,management,CLI;Script,script;management;approach;manager,.aiox-core/infrastructure/scripts/approach-manager.js,active
+approval-workflow,Approval Workflow,script,utility,CLI;Script,script;utility;approval;workflow,.aiox-core/infrastructure/scripts/approval-workflow.js,active
+asset-inventory,Asset Inventory,script,utility,CLI;Script,script;utility;asset;inventory,.aiox-core/infrastructure/scripts/asset-inventory.js,active
+atomic-layer-classifier,Atomic Layer Classifier,script,utility,CLI;Script,script;utility;atomic;layer;classifier,.aiox-core/infrastructure/scripts/atomic-layer-classifier.js,active
+backup-manager,Backup Manager,script,management,CLI;Script,script;management;backup;manager,.aiox-core/infrastructure/scripts/backup-manager.js,active
+batch-creator,Batch Creator,script,utility,CLI;Script,script;utility;batch;creator,.aiox-core/infrastructure/scripts/batch-creator.js,active
+bootstrap,Bootstrap,script,utility,CLI;Script,script;utility;bootstrap,.aiox-core/infrastructure/scripts/codex-skills-sync/bootstrap.js,active
+branch-manager,Branch Manager,script,management,CLI;Script,script;management;branch;manager,.aiox-core/infrastructure/scripts/branch-manager.js,active
+brownfield-analyzer,Brownfield Analyzer,script,analysis,CLI;Script,script;analysis;brownfield;analyzer,.aiox-core/infrastructure/scripts/documentation-integrity/brownfield-analyzer.js,active
+capability-analyzer,Capability Analyzer,script,analysis,CLI;Script,script;analysis;capability;analyzer,.aiox-core/infrastructure/scripts/capability-analyzer.js,active
+changelog-generator,Changelog Generator,script,generation,CLI;Script,script;generation;changelog;generator,.aiox-core/infrastructure/scripts/changelog-generator.js,active
+cicd-discovery,Cicd Discovery,script,utility,CLI;Script,script;utility;cicd;discovery,.aiox-core/infrastructure/scripts/cicd-discovery.js,active
+claude-code,Claude Code,script,utility,CLI;Script,script;utility;claude;code,.aiox-core/infrastructure/scripts/ide-sync/transformers/claude-code.js,active
+clickup-helpers,Clickup Helpers,script,utility,CLI;Script,script;utility;clickup;helpers,.aiox-core/infrastructure/scripts/clickup-helpers.js,active
+code-quality-improver,Code Quality Improver,script,utility,CLI;Script,script;utility;code;quality;improver,.aiox-core/infrastructure/scripts/code-quality-improver.js,active
+codebase-mapper,Codebase Mapper,script,utility,CLI;Script,script;utility;codebase;mapper,.aiox-core/infrastructure/scripts/codebase-mapper.js,active
+collect-tool-usage,Collect Tool Usage,script,utility,CLI;Script,script;utility;collect;tool;usage,.aiox-core/infrastructure/scripts/collect-tool-usage.js,active
+commit-message-generator,Commit Message Generator,script,generation,CLI;Script,script;generation;commit;message;generator,.aiox-core/infrastructure/scripts/commit-message-generator.js,active
+component-generator,Component Generator,script,generation,CLI;Script,script;generation;component;generator;product,.aiox-core/infrastructure/scripts/component-generator.js,active
+component-metadata,Component Metadata,script,utility,CLI;Script,script;utility;component;metadata;product,.aiox-core/infrastructure/scripts/component-metadata.js,active
+component-search,Component Search,script,utility,CLI;Script,script;utility;component;search;product,.aiox-core/infrastructure/scripts/component-search.js,active
+config-cache,Config Cache,script,configuration,CLI;Script,script;configuration;config;cache,.aiox-core/infrastructure/scripts/config-cache.js,active
+config-generator,Config Generator,script,generation,CLI;Script,script;generation;config;generator,.aiox-core/infrastructure/scripts/documentation-integrity/config-generator.js,active
+config-loader,Config Loader,script,configuration,CLI;Script,script;configuration;config;loader,.aiox-core/infrastructure/scripts/config-loader.js,active
+conflict-resolver,Conflict Resolver,script,utility,CLI;Script,script;utility;conflict;resolver,.aiox-core/infrastructure/scripts/conflict-resolver.js,active
+coverage-analyzer,Coverage Analyzer,script,analysis,CLI;Script,script;analysis;coverage;analyzer,.aiox-core/infrastructure/scripts/coverage-analyzer.js,active
+cursor,Cursor,script,utility,CLI;Script,script;utility;cursor,.aiox-core/infrastructure/scripts/ide-sync/transformers/cursor.js,active
+dashboard-status-writer,Dashboard Status Writer,script,utility,CLI;Script,script;utility;dashboard;status;writer,.aiox-core/infrastructure/scripts/dashboard-status-writer.js,active
+dependency-analyzer,Dependency Analyzer,script,analysis,CLI;Script,script;analysis;dependency;analyzer,.aiox-core/infrastructure/scripts/dependency-analyzer.js,active
+dependency-impact-analyzer,Dependency Impact Analyzer,script,analysis,CLI;Script,script;analysis;dependency;impact;analyzer,.aiox-core/infrastructure/scripts/dependency-impact-analyzer.js,active
+deployment-config-loader,Deployment Config Loader,script,configuration,CLI;Script,script;configuration;deployment;config;loader,.aiox-core/infrastructure/scripts/documentation-integrity/deployment-config-loader.js,active
+diff-generator,Diff Generator,script,generation,CLI;Script,script;generation;diff;generator,.aiox-core/infrastructure/scripts/diff-generator.js,active
+doc-generator,Doc Generator,script,generation,CLI;Script,script;generation;doc;generator,.aiox-core/infrastructure/scripts/documentation-integrity/doc-generator.js,active
+documentation-synchronizer,Documentation Synchronizer,script,utility,CLI;Script,script;utility;documentation;synchronizer,.aiox-core/infrastructure/scripts/documentation-synchronizer.js,active
+framework-3way-diff,Framework 3way Diff,script,utility,CLI;Script,script;utility;framework;3way;diff,.aiox-core/infrastructure/scripts/framework-3way-diff.js,active
+framework-analyzer,Framework Analyzer,script,analysis,CLI;Script,script;analysis;framework;analyzer,.aiox-core/infrastructure/scripts/framework-analyzer.js,active
+gemini-commands,Gemini Commands,script,utility,CLI;Script,script;utility;gemini;commands,.aiox-core/infrastructure/scripts/ide-sync/gemini-commands.js,active
+generate-optimization-report,Generate Optimization Report,script,utility,CLI;Script,script;utility;generate;optimization;report;creation;product,.aiox-core/infrastructure/scripts/generate-optimization-report.js,active
+generate-settings-json,Generate Settings Json,script,utility,CLI;Script,script;utility;generate;settings;json;creation,.aiox-core/infrastructure/scripts/generate-settings-json.js,active
+git-config-detector,Git Config Detector,script,configuration,CLI;Script,script;configuration;git;config;detector,.aiox-core/infrastructure/scripts/git-config-detector.js,active
+git-wrapper,Git Wrapper,script,utility,CLI;Script,script;utility;git;wrapper,.aiox-core/infrastructure/scripts/git-wrapper.js,active
+github-copilot,Github Copilot,script,utility,CLI;Script,script;utility;github;copilot;git,.aiox-core/infrastructure/scripts/ide-sync/transformers/github-copilot.js,active
+gitignore-generator,Gitignore Generator,script,generation,CLI;Script,script;generation;gitignore;generator;git,.aiox-core/infrastructure/scripts/documentation-integrity/gitignore-generator.js,active
+gotchas-documenter,Gotchas Documenter,script,utility,CLI;Script,script;utility;gotchas;documenter,.aiox-core/infrastructure/scripts/gotchas-documenter.js,active
+improvement-engine,Improvement Engine,script,utility,CLI;Script,script;utility;improvement;engine,.aiox-core/infrastructure/scripts/improvement-engine.js,active
+improvement-validator,Improvement Validator,script,validation,CLI;Script,script;validation;improvement;validator,.aiox-core/infrastructure/scripts/improvement-validator.js,active
+index,Index,script,utility,CLI;Script,script;utility;index,.aiox-core/infrastructure/scripts/ide-sync/index.js,active
+index-script-1,Index,script,utility,CLI;Script,script;utility;index,.aiox-core/infrastructure/scripts/grok-skills-sync/index.js,active
+index-script-2,Index,script,utility,CLI;Script,script;utility;index,.aiox-core/infrastructure/scripts/documentation-integrity/index.js,active
+index-script-3,Index,script,utility,CLI;Script,script;utility;index,.aiox-core/infrastructure/scripts/codex-skills-sync/index.js,active
+index-script-4,Index,script,utility,CLI;Script,script;utility;index,.aiox-core/infrastructure/scripts/llm-routing/usage-tracker/index.js,active
+install-llm-routing,Install Llm Routing,script,utility,CLI;Script,script;utility;install;llm;routing,.aiox-core/infrastructure/scripts/llm-routing/install-llm-routing.js,active
+kimi,Kimi,script,utility,CLI;Script,script;utility;kimi,.aiox-core/infrastructure/scripts/ide-sync/transformers/kimi.js,active
+migrate-agent,Migrate Agent,script,utility,CLI;Script,script;utility;migrate;agent,.aiox-core/infrastructure/scripts/migrate-agent.js,active
+mode-detector,Mode Detector,script,utility,CLI;Script,script;utility;mode;detector,.aiox-core/infrastructure/scripts/documentation-integrity/mode-detector.js,active
+modification-risk-assessment,Modification Risk Assessment,script,utility,CLI;Script,script;utility;modification;risk;assessment,.aiox-core/infrastructure/scripts/modification-risk-assessment.js,active
+modification-validator,Modification Validator,script,validation,CLI;Script,script;validation;modification;validator,.aiox-core/infrastructure/scripts/modification-validator.js,active
+output-formatter,Output Formatter,script,utility,CLI;Script,script;utility;output;formatter,.aiox-core/infrastructure/scripts/output-formatter.js,active
+path-analyzer,Path Analyzer,script,analysis,CLI;Script,script;analysis;path;analyzer,.aiox-core/infrastructure/scripts/path-analyzer.js,active
+pattern-extractor,Pattern Extractor,script,utility,CLI;Script,script;utility;pattern;extractor,.aiox-core/infrastructure/scripts/pattern-extractor.js,active
+performance-analyzer,Performance Analyzer,script,analysis,CLI;Script,script;analysis;performance;analyzer,.aiox-core/infrastructure/scripts/performance-analyzer.js,active
+performance-and-error-resolver,Performance And Error Resolver,script,utility,CLI;Script,script;utility;performance;and;error;resolver,.aiox-core/infrastructure/scripts/performance-and-error-resolver.js,active
+performance-optimizer,Performance Optimizer,script,utility,CLI;Script,script;utility;performance;optimizer,.aiox-core/infrastructure/scripts/performance-optimizer.js,active
+performance-tracker,Performance Tracker,script,utility,CLI;Script,script;utility;performance;tracker,.aiox-core/infrastructure/scripts/performance-tracker.js,active
+plan-tracker,Plan Tracker,script,utility,CLI;Script,script;utility;plan;tracker,.aiox-core/infrastructure/scripts/plan-tracker.js,active
+pm-adapter,Pm Adapter,script,utility,CLI;Script,script;utility;adapter,.aiox-core/infrastructure/scripts/pm-adapter.js,active
+pm-adapter-factory,Pm Adapter Factory,script,utility,CLI;Script,script;utility;adapter;factory,.aiox-core/infrastructure/scripts/pm-adapter-factory.js,active
+post-commit,Post Commit,script,utility,CLI;Script,script;utility;post;commit;product,.aiox-core/infrastructure/scripts/git-hooks/post-commit.js,active
+pr-review-ai,Pr Review Ai,script,utility,CLI;Script,script;utility;review,.aiox-core/infrastructure/scripts/pr-review-ai.js,active
+pre-dispatch-guard,Pre Dispatch Guard,script,utility,CLI;Script,script;utility;pre;dispatch;guard,.aiox-core/infrastructure/scripts/pre-dispatch-guard.js,active
+project-status-loader,Project Status Loader,script,configuration,CLI;Script,script;configuration;project;status;loader,.aiox-core/infrastructure/scripts/project-status-loader.js,active
+qa-loop-orchestrator,Qa Loop Orchestrator,script,utility,CLI;Script,script;utility;loop;orchestrator;testing,.aiox-core/infrastructure/scripts/qa-loop-orchestrator.js,active
+qa-report-generator,Qa Report Generator,script,generation,CLI;Script,script;generation;report;generator;testing;product,.aiox-core/infrastructure/scripts/qa-report-generator.js,active
+recovery-tracker,Recovery Tracker,script,utility,CLI;Script,script;utility;recovery;tracker,.aiox-core/infrastructure/scripts/recovery-tracker.js,active
+redirect-generator,Redirect Generator,script,generation,CLI;Script,script;generation;redirect;generator,.aiox-core/infrastructure/scripts/ide-sync/redirect-generator.js,active
+refactoring-suggester,Refactoring Suggester,script,utility,CLI;Script,script;utility;refactoring;suggester,.aiox-core/infrastructure/scripts/refactoring-suggester.js,active
+repair-agent-references,Repair Agent References,script,utility,CLI;Script,script;utility;repair;agent;references,.aiox-core/infrastructure/scripts/repair-agent-references.js,active
+repository-detector,Repository Detector,script,utility,CLI;Script,script;utility;repository;detector;product,.aiox-core/infrastructure/scripts/repository-detector.js,active
+rollback-manager,Rollback Manager,script,management,CLI;Script,script;management;rollback;manager,.aiox-core/infrastructure/scripts/rollback-manager.js,active
+sandbox-tester,Sandbox Tester,script,testing,CLI;Script,script;testing;sandbox;tester;database,.aiox-core/infrastructure/scripts/sandbox-tester.js,active
+security-checker,Security Checker,script,validation,CLI;Script,script;validation;security;checker,.aiox-core/infrastructure/scripts/security-checker.js,active
+spot-check-validator,Spot Check Validator,script,validation,CLI;Script,script;validation;spot;check;validator;product,.aiox-core/infrastructure/scripts/spot-check-validator.js,active
+status-mapper,Status Mapper,script,utility,CLI;Script,script;utility;status;mapper,.aiox-core/infrastructure/scripts/status-mapper.js,active
+story-worktree-hooks,Story Worktree Hooks,script,utility,CLI;Script,script;utility;story;worktree;hooks;product,.aiox-core/infrastructure/scripts/story-worktree-hooks.js,active
+stuck-detector,Stuck Detector,script,utility,CLI;Script,script;utility;stuck;detector,.aiox-core/infrastructure/scripts/stuck-detector.js,active
+subtask-verifier,Subtask Verifier,script,utility,CLI;Script,script;utility;subtask;verifier,.aiox-core/infrastructure/scripts/subtask-verifier.js,active
+template-engine,Template Engine,script,utility,CLI;Script,script;utility;template;engine,.aiox-core/infrastructure/scripts/template-engine.js,active
+template-validator,Template Validator,script,validation,CLI;Script,script;validation;template;validator,.aiox-core/infrastructure/scripts/template-validator.js,active
+test-discovery,Test Discovery,script,testing,CLI;Script,script;testing;test;discovery,.aiox-core/infrastructure/scripts/test-discovery.js,active
+test-generator,Test Generator,script,generation,CLI;Script,script;generation;test;generator;testing,.aiox-core/infrastructure/scripts/test-generator.js,active
+test-quality-assessment,Test Quality Assessment,script,testing,CLI;Script,script;testing;test;quality;assessment,.aiox-core/infrastructure/scripts/test-quality-assessment.js,active
+test-utilities,Test Utilities,script,testing,CLI;Script,script;testing;test;utilities,.aiox-core/infrastructure/scripts/test-utilities.js,active
+test-utilities-fast,Test Utilities Fast,script,testing,CLI;Script,script;testing;test;utilities;fast,.aiox-core/infrastructure/scripts/test-utilities-fast.js,active
+tool-resolver,Tool Resolver,script,utility,CLI;Script,script;utility;tool;resolver,.aiox-core/infrastructure/scripts/tool-resolver.js,active
+transaction-manager,Transaction Manager,script,management,CLI;Script,script;management;transaction;manager,.aiox-core/infrastructure/scripts/transaction-manager.js,active
+usage-analytics,Usage Analytics,script,utility,CLI;Script,script;utility;usage;analytics,.aiox-core/infrastructure/scripts/usage-analytics.js,active
+validate,Validate,script,utility,CLI;Script,script;utility;validate;validation,.aiox-core/infrastructure/scripts/grok-skills-sync/validate.js,active
+validate-script-1,Validate,script,utility,CLI;Script,script;utility;validate;validation,.aiox-core/infrastructure/scripts/codex-skills-sync/validate.js,active
+validate-agents-script-1,Validate Agents,script,utility,CLI;Script,script;utility;validate;agents;validation,.aiox-core/infrastructure/scripts/validate-agents.js,active
+validate-claude-integration,Validate Claude Integration,script,utility,CLI;Script,script;utility;validate;claude;integration;validation,.aiox-core/infrastructure/scripts/validate-claude-integration.js,active
+validate-codex-integration,Validate Codex Integration,script,utility,CLI;Script,script;utility;validate;codex;integration;validation,.aiox-core/infrastructure/scripts/validate-codex-integration.js,active
+validate-gemini-integration,Validate Gemini Integration,script,utility,CLI;Script,script;utility;validate;gemini;integration;validation,.aiox-core/infrastructure/scripts/validate-gemini-integration.js,active
+validate-output-pattern,Validate Output Pattern,script,utility,CLI;Script,script;utility;validate;output;pattern;validation,.aiox-core/infrastructure/scripts/validate-output-pattern.js,active
+validate-parity,Validate Parity,script,utility,CLI;Script,script;utility;validate;parity;validation,.aiox-core/infrastructure/scripts/validate-parity.js,active
+validate-paths,Validate Paths,script,utility,CLI;Script,script;utility;validate;paths;validation,.aiox-core/infrastructure/scripts/validate-paths.js,active
+validate-user-profile,Validate User Profile,script,utility,CLI;Script,script;utility;validate;user;profile;validation,.aiox-core/infrastructure/scripts/validate-user-profile.js,active
+validator,Validator,script,validation,CLI;Script,script;validation;validator,.aiox-core/infrastructure/scripts/ide-sync/validator.js,active
+visual-impact-generator,Visual Impact Generator,script,generation,CLI;Script,script;generation;visual;impact;generator,.aiox-core/infrastructure/scripts/visual-impact-generator.js,active
+worktree-manager,Worktree Manager,script,management,CLI;Script,script;management;worktree;manager,.aiox-core/infrastructure/scripts/worktree-manager.js,active
+yaml-validator,Yaml Validator,script,validation,CLI;Script,script;validation;yaml;validator,.aiox-core/infrastructure/scripts/yaml-validator.js,active
+add-mcp,Add Mcp,task,general,Agent;Worker,task;general;add;mcp,.aiox-core/development/tasks/add-mcp.md,active
+advanced-elicitation,Advanced Elicitation,task,general,Agent;Worker,task;general;advanced;elicitation,.aiox-core/development/tasks/advanced-elicitation.md,active
+agent-prompt-template,Agent Prompt Template,task,general,Agent;Worker,task;general;agent;prompt;template,.aiox-core/development/tasks/blocks/agent-prompt-template.md,active
+analyst-facilitate-brainstorming,Analyst Facilitate Brainstorming,task,general,Agent;Worker,task;general;analyst;facilitate;brainstorming,.aiox-core/development/tasks/analyst-facilitate-brainstorming.md,active
+analyze-brownfield,Analyze Brownfield,task,analysis,Agent;Worker,task;analysis;analyze;brownfield,.aiox-core/development/tasks/analyze-brownfield.md,active
+analyze-cross-artifact,Analyze Cross Artifact,task,analysis,Agent;Worker,task;analysis;analyze;cross;artifact,.aiox-core/development/tasks/analyze-cross-artifact.md,active
+analyze-framework,Analyze Framework,task,analysis,Agent;Worker,task;analysis;analyze;framework,.aiox-core/development/tasks/analyze-framework.md,active
+analyze-performance,Analyze Performance,task,analysis,Agent;Worker,task;analysis;analyze;performance,.aiox-core/development/tasks/analyze-performance.md,active
+analyze-project-structure,Analyze Project Structure,task,analysis,Agent;Worker,task;analysis;analyze;project;structure,.aiox-core/development/tasks/analyze-project-structure.md,active
+apply-qa-fixes,Apply Qa Fixes,task,general,Agent;Worker,task;general;apply;fixes;testing,.aiox-core/development/tasks/apply-qa-fixes.md,active
+architect-analyze-impact,Architect Analyze Impact,task,analysis,Agent;Worker,task;analysis;architect;analyze;impact,.aiox-core/development/tasks/architect-analyze-impact.md,active
+audit-codebase,Audit Codebase,task,validation,Agent;Worker,task;validation;audit;codebase;analysis,.aiox-core/development/tasks/audit-codebase.md,active
+audit-tailwind-config,Audit Tailwind Config,task,validation,Agent;Worker,task;validation;audit;tailwind;config;analysis,.aiox-core/development/tasks/audit-tailwind-config.md,active
+audit-utilities,Audit Utilities,task,validation,Agent;Worker,task;validation;audit;utilities;analysis,.aiox-core/development/tasks/audit-utilities.md,active
+bootstrap-shadcn-library,Bootstrap Shadcn Library,task,general,Agent;Worker,task;general;bootstrap;shadcn;library,.aiox-core/development/tasks/bootstrap-shadcn-library.md,active
+brownfield-create-epic,Brownfield Create Epic,task,creation,Agent;Worker,task;creation;brownfield;create;epic,.aiox-core/development/tasks/brownfield-create-epic.md,active
+brownfield-create-story,Brownfield Create Story,task,creation,Agent;Worker,task;creation;brownfield;create;story;product,.aiox-core/development/tasks/brownfield-create-story.md,active
+build,Build,task,general,Agent;Worker,task;general;build,.aiox-core/development/tasks/build.md,active
+build-autonomous,Build Autonomous,task,general,Agent;Worker,task;general;build;autonomous,.aiox-core/development/tasks/build-autonomous.md,active
+build-component,Build Component,task,general,Agent;Worker,task;general;build;component;product,.aiox-core/development/tasks/build-component.md,active
+build-resume,Build Resume,task,general,Agent;Worker,task;general;build;resume,.aiox-core/development/tasks/build-resume.md,active
+build-status,Build Status,task,general,Agent;Worker,task;general;build;status,.aiox-core/development/tasks/build-status.md,active
+calculate-roi,Calculate Roi,task,general,Agent;Worker,task;general;calculate;roi,.aiox-core/development/tasks/calculate-roi.md,active
+check-docs-links,Check Docs Links,task,general,Agent;Worker,task;general;check;docs;links;validation,.aiox-core/development/tasks/check-docs-links.md,active
+ci-cd-configuration,Ci Cd Configuration,task,general,Agent;Worker,task;general;configuration,.aiox-core/development/tasks/ci-cd-configuration.md,active
+cleanup-utilities,Cleanup Utilities,task,general,Agent;Worker,task;general;cleanup;utilities,.aiox-core/development/tasks/cleanup-utilities.md,active
+cleanup-worktrees,Cleanup Worktrees,task,general,Agent;Worker,task;general;cleanup;worktrees,.aiox-core/development/tasks/cleanup-worktrees.md,active
+collaborative-edit,Collaborative Edit,task,modification,Agent;Worker,task;modification;collaborative;edit,.aiox-core/development/tasks/collaborative-edit.md,active
+compose-molecule,Compose Molecule,task,general,Agent;Worker,task;general;compose;molecule;product,.aiox-core/development/tasks/compose-molecule.md,active
+consolidate-patterns,Consolidate Patterns,task,general,Agent;Worker,task;general;consolidate;patterns,.aiox-core/development/tasks/consolidate-patterns.md,active
+context-loading,Context Loading,task,general,Agent;Worker,task;general;context;loading,.aiox-core/development/tasks/blocks/context-loading.md,active
+correct-course,Correct Course,task,general,Agent;Worker,task;general;correct;course,.aiox-core/development/tasks/correct-course.md,active
+create-agent,Create Agent,task,creation,Agent;Worker,task;creation;create;agent,.aiox-core/development/tasks/create-agent.md,active
+create-brownfield-story,Create Brownfield Story,task,creation,Agent;Worker,task;creation;create;brownfield;story;product,.aiox-core/development/tasks/create-brownfield-story.md,active
+create-deep-research-prompt,Create Deep Research Prompt,task,creation,Agent;Worker,task;creation;create;deep;research;prompt,.aiox-core/development/tasks/create-deep-research-prompt.md,active
+create-doc,Create Doc,task,creation,Agent;Worker,task;creation;create;doc,.aiox-core/development/tasks/create-doc.md,active
+create-next-story,Create Next Story,task,creation,Agent;Worker,task;creation;create;next;story;product,.aiox-core/development/tasks/create-next-story.md,active
+create-service,Create Service,task,creation,Agent;Worker,task;creation;create;service,.aiox-core/development/tasks/create-service.md,active
+create-suite,Create Suite,task,creation,Agent;Worker,task;creation;create;suite,.aiox-core/development/tasks/create-suite.md,active
+create-task,Create Task,task,creation,Agent;Worker,task;creation;create,.aiox-core/development/tasks/create-task.md,active
+create-workflow,Create Workflow,task,creation,Agent;Worker,task;creation;create;workflow,.aiox-core/development/tasks/create-workflow.md,active
+create-worktree,Create Worktree,task,creation,Agent;Worker,task;creation;create;worktree,.aiox-core/development/tasks/create-worktree.md,active
+db-analyze-hotpaths,Db Analyze Hotpaths,task,analysis,Agent;Worker,task;analysis;analyze;hotpaths;database,.aiox-core/development/tasks/db-analyze-hotpaths.md,active
+db-apply-migration,Db Apply Migration,task,general,Agent;Worker,task;general;apply;migration;database,.aiox-core/development/tasks/db-apply-migration.md,active
+db-bootstrap,Db Bootstrap,task,general,Agent;Worker,task;general;bootstrap;database,.aiox-core/development/tasks/db-bootstrap.md,active
+db-domain-modeling,Db Domain Modeling,task,general,Agent;Worker,task;general;domain;modeling;database,.aiox-core/development/tasks/db-domain-modeling.md,active
+db-dry-run,Db Dry Run,task,general,Agent;Worker,task;general;dry;run;database,.aiox-core/development/tasks/db-dry-run.md,active
+db-env-check,Db Env Check,task,general,Agent;Worker,task;general;env;check;database;validation,.aiox-core/development/tasks/db-env-check.md,active
+db-explain,Db Explain,task,general,Agent;Worker,task;general;explain;database,.aiox-core/development/tasks/db-explain.md,active
+db-impersonate,Db Impersonate,task,general,Agent;Worker,task;general;impersonate;database,.aiox-core/development/tasks/db-impersonate.md,active
+db-load-csv,Db Load Csv,task,general,Agent;Worker,task;general;load;csv;database,.aiox-core/development/tasks/db-load-csv.md,active
+db-policy-apply,Db Policy Apply,task,general,Agent;Worker,task;general;policy;apply;database;product,.aiox-core/development/tasks/db-policy-apply.md,active
+db-rls-audit,Db Rls Audit,task,validation,Agent;Worker,task;validation;rls;audit;database;analysis,.aiox-core/development/tasks/db-rls-audit.md,active
+db-rollback,Db Rollback,task,general,Agent;Worker,task;general;rollback;database,.aiox-core/development/tasks/db-rollback.md,active
+db-run-sql,Db Run Sql,task,general,Agent;Worker,task;general;run;sql;database,.aiox-core/development/tasks/db-run-sql.md,active
+db-schema-audit,Db Schema Audit,task,validation,Agent;Worker,task;validation;schema;audit;database;analysis,.aiox-core/development/tasks/db-schema-audit.md,active
+db-seed,Db Seed,task,general,Agent;Worker,task;general;seed;database,.aiox-core/development/tasks/db-seed.md,active
+db-smoke-test,Db Smoke Test,task,general,Agent;Worker,task;general;smoke;test;testing;database,.aiox-core/development/tasks/db-smoke-test.md,active
+db-snapshot,Db Snapshot,task,general,Agent;Worker,task;general;snapshot;database,.aiox-core/development/tasks/db-snapshot.md,active
+db-squad-integration,Db Squad Integration,task,general,Agent;Worker,task;general;squad;integration;database,.aiox-core/development/tasks/db-squad-integration.md,active
+db-supabase-setup,Db Supabase Setup,task,general,Agent;Worker,task;general;supabase;setup;database,.aiox-core/development/tasks/db-supabase-setup.md,active
+db-verify-order,Db Verify Order,task,general,Agent;Worker,task;general;verify;order;database,.aiox-core/development/tasks/db-verify-order.md,active
+delegate-to-external-executor,Delegate To External Executor,task,general,Agent;Worker,task;general;delegate;external;executor,.aiox-core/development/tasks/delegate-to-external-executor.md,active
+deprecate-component,Deprecate Component,task,general,Agent;Worker,task;general;deprecate;component;product,.aiox-core/development/tasks/deprecate-component.md,active
+dev-apply-qa-fixes,Dev Apply Qa Fixes,task,general,Agent;Worker,task;general;dev;apply;fixes;testing;development,.aiox-core/development/tasks/dev-apply-qa-fixes.md,active
+dev-backlog-debt,Dev Backlog Debt,task,general,Agent;Worker,task;general;dev;backlog;debt;development,.aiox-core/development/tasks/dev-backlog-debt.md,active
+dev-develop-story,Dev Develop Story,task,general,Agent;Worker,task;general;dev;develop;story;development;product,.aiox-core/development/tasks/dev-develop-story.md,active
+dev-improve-code-quality,Dev Improve Code Quality,task,general,Agent;Worker,task;general;dev;improve;code;quality;development,.aiox-core/development/tasks/dev-improve-code-quality.md,active
+dev-optimize-performance,Dev Optimize Performance,task,general,Agent;Worker,task;general;dev;optimize;performance;development,.aiox-core/development/tasks/dev-optimize-performance.md,active
+dev-suggest-refactoring,Dev Suggest Refactoring,task,general,Agent;Worker,task;general;dev;suggest;refactoring;development,.aiox-core/development/tasks/dev-suggest-refactoring.md,active
+dev-validate-next-story,Dev Validate Next Story,task,validation,Agent;Worker,task;validation;dev;validate;next;story;development;product,.aiox-core/development/tasks/dev-validate-next-story.md,active
+devops-pro-access-grant,Devops Pro Access Grant,task,general,Agent;Worker,task;general;devops;pro;access;grant;development,.aiox-core/development/tasks/devops-pro-access-grant.md,active
+devops-pro-activate,Devops Pro Activate,task,general,Agent;Worker,task;general;devops;pro;activate;development,.aiox-core/development/tasks/devops-pro-activate.md,active
+devops-pro-check-access,Devops Pro Check Access,task,general,Agent;Worker,task;general;devops;pro;check;access;development;validation,.aiox-core/development/tasks/devops-pro-check-access.md,active
+devops-pro-request-reset,Devops Pro Request Reset,task,general,Agent;Worker,task;general;devops;pro;request;reset;development,.aiox-core/development/tasks/devops-pro-request-reset.md,active
+devops-pro-resend-verification,Devops Pro Resend Verification,task,general,Agent;Worker,task;general;devops;pro;resend;verification;development,.aiox-core/development/tasks/devops-pro-resend-verification.md,active
+devops-pro-reset-password,Devops Pro Reset Password,task,general,Agent;Worker,task;general;devops;pro;reset;password;development,.aiox-core/development/tasks/devops-pro-reset-password.md,active
+devops-pro-validate-login,Devops Pro Validate Login,task,validation,Agent;Worker,task;validation;devops;pro;validate;login;development,.aiox-core/development/tasks/devops-pro-validate-login.md,active
+devops-pro-verify-status,Devops Pro Verify Status,task,general,Agent;Worker,task;general;devops;pro;verify;status;development,.aiox-core/development/tasks/devops-pro-verify-status.md,active
+document-gotchas,Document Gotchas,task,general,Agent;Worker,task;general;document;gotchas,.aiox-core/development/tasks/document-gotchas.md,active
+document-project,Document Project,task,general,Agent;Worker,task;general;document;project,.aiox-core/development/tasks/document-project.md,active
+environment-bootstrap,Environment Bootstrap,task,general,Agent;Worker,task;general;environment;bootstrap,.aiox-core/development/tasks/environment-bootstrap.md,active
+execute-checklist,Execute Checklist,task,general,Agent;Worker,task;general;execute;checklist;validation,.aiox-core/development/tasks/execute-checklist.md,active
+execute-epic-plan,Execute Epic Plan,task,general,Agent;Worker,task;general;execute;epic;plan,.aiox-core/development/tasks/execute-epic-plan.md,active
+execution-pattern,Execution Pattern,task,general,Agent;Worker,task;general;execution;pattern,.aiox-core/development/tasks/blocks/execution-pattern.md,active
+export-design-tokens-dtcg,Export Design Tokens Dtcg,task,general,Agent;Worker,task;general;export;design;tokens;dtcg;product,.aiox-core/development/tasks/export-design-tokens-dtcg.md,active
+extend-pattern,Extend Pattern,task,general,Agent;Worker,task;general;extend;pattern,.aiox-core/development/tasks/extend-pattern.md,active
+extract-patterns,Extract Patterns,task,general,Agent;Worker,task;general;extract;patterns,.aiox-core/development/tasks/extract-patterns.md,active
+extract-tokens,Extract Tokens,task,general,Agent;Worker,task;general;extract;tokens,.aiox-core/development/tasks/extract-tokens.md,active
+facilitate-brainstorming-session,Facilitate Brainstorming Session,task,general,Agent;Worker,task;general;facilitate;brainstorming;session,.aiox-core/development/tasks/facilitate-brainstorming-session.md,active
+fast-path-gate,Fast Path Gate,task,general,Agent;Worker,task;general;fast;path;gate,.aiox-core/development/tasks/fast-path-gate.md,active
+finalization,Finalization,task,general,Agent;Worker,task;general;finalization,.aiox-core/development/tasks/blocks/finalization.md,active
+generate-ai-frontend-prompt,Generate Ai Frontend Prompt,task,general,Agent;Worker,task;general;generate;frontend;prompt;creation,.aiox-core/development/tasks/generate-ai-frontend-prompt.md,active
+generate-documentation,Generate Documentation,task,general,Agent;Worker,task;general;generate;documentation;creation,.aiox-core/development/tasks/generate-documentation.md,active
+generate-migration-strategy,Generate Migration Strategy,task,general,Agent;Worker,task;general;generate;migration;strategy;creation,.aiox-core/development/tasks/generate-migration-strategy.md,active
+generate-shock-report,Generate Shock Report,task,general,Agent;Worker,task;general;generate;shock;report;creation;product,.aiox-core/development/tasks/generate-shock-report.md,active
+github-devops-github-pr-automation,Github Devops Github Pr Automation,task,general,Agent;Worker,task;general;github;devops;automation;development;git,.aiox-core/development/tasks/github-devops-github-pr-automation.md,active
+github-devops-pre-push-quality-gate,Github Devops Pre Push Quality Gate,task,general,Agent;Worker,task;general;github;devops;pre;push;quality;gate;development;git,.aiox-core/development/tasks/github-devops-pre-push-quality-gate.md,active
+github-devops-repository-cleanup,Github Devops Repository Cleanup,task,general,Agent;Worker,task;general;github;devops;repository;cleanup;development;product;git,.aiox-core/development/tasks/github-devops-repository-cleanup.md,active
+github-devops-version-management,Github Devops Version Management,task,general,Agent;Worker,task;general;github;devops;version;management;development;git,.aiox-core/development/tasks/github-devops-version-management.md,active
+github-issue-triage,Github Issue Triage,task,general,Agent;Worker,task;general;github;issue;triage;git,.aiox-core/development/tasks/github-issue-triage.md,active
+gotcha,Gotcha,task,general,Agent;Worker,task;general;gotcha,.aiox-core/development/tasks/gotcha.md,active
+gotchas,Gotchas,task,general,Agent;Worker,task;general;gotchas,.aiox-core/development/tasks/gotchas.md,active
+ids-governor,Ids Governor,task,general,Agent;Worker,task;general;ids;governor,.aiox-core/development/tasks/ids-governor.md,active
+ids-health,Ids Health,task,general,Agent;Worker,task;general;ids;health,.aiox-core/development/tasks/ids-health.md,active
+ids-query,Ids Query,task,general,Agent;Worker,task;general;ids;query,.aiox-core/development/tasks/ids-query.md,active
+improve-self,Improve Self,task,general,Agent;Worker,task;general;improve;self,.aiox-core/development/tasks/improve-self.md,active
+index-docs,Index Docs,task,general,Agent;Worker,task;general;index;docs,.aiox-core/development/tasks/index-docs.md,active
+init-project-status,Init Project Status,task,general,Agent;Worker,task;general;init;project;status,.aiox-core/development/tasks/init-project-status.md,active
+integrate-squad,Integrate Squad,task,general,Agent;Worker,task;general;integrate;squad,.aiox-core/development/tasks/integrate-squad.md,active
+kb-mode-interaction,Kb Mode Interaction,task,general,Agent;Worker,task;general;mode;interaction,.aiox-core/development/tasks/kb-mode-interaction.md,active
+learn-patterns,Learn Patterns,task,general,Agent;Worker,task;general;learn;patterns,.aiox-core/development/tasks/learn-patterns.md,active
+list-mcps,List Mcps,task,general,Agent;Worker,task;general;list;mcps,.aiox-core/development/tasks/list-mcps.md,active
+list-worktrees,List Worktrees,task,general,Agent;Worker,task;general;list;worktrees,.aiox-core/development/tasks/list-worktrees.md,active
+mcp-workflow,Mcp Workflow,task,general,Agent;Worker,task;general;mcp;workflow,.aiox-core/development/tasks/mcp-workflow.md,active
+merge-worktree,Merge Worktree,task,general,Agent;Worker,task;general;merge;worktree,.aiox-core/development/tasks/merge-worktree.md,active
+modify-agent,Modify Agent,task,modification,Agent;Worker,task;modification;modify;agent,.aiox-core/development/tasks/modify-agent.md,active
+modify-task,Modify Task,task,modification,Agent;Worker,task;modification;modify,.aiox-core/development/tasks/modify-task.md,active
+modify-workflow,Modify Workflow,task,modification,Agent;Worker,task;modification;modify;workflow,.aiox-core/development/tasks/modify-workflow.md,active
+next,Next,task,general,Agent;Worker,task;general;next,.aiox-core/development/tasks/next.md,active
+orchestrate,Orchestrate,task,general,Agent;Worker,task;general;orchestrate,.aiox-core/development/tasks/orchestrate.md,active
+orchestrate-resume,Orchestrate Resume,task,general,Agent;Worker,task;general;orchestrate;resume,.aiox-core/development/tasks/orchestrate-resume.md,active
+orchestrate-status,Orchestrate Status,task,general,Agent;Worker,task;general;orchestrate;status,.aiox-core/development/tasks/orchestrate-status.md,active
+orchestrate-stop,Orchestrate Stop,task,general,Agent;Worker,task;general;orchestrate;stop,.aiox-core/development/tasks/orchestrate-stop.md,active
+patterns,Patterns,task,general,Agent;Worker,task;general;patterns,.aiox-core/development/tasks/patterns.md,active
+plan-create-context,Plan Create Context,task,creation,Agent;Worker,task;creation;plan;create;context,.aiox-core/development/tasks/plan-create-context.md,active
+plan-create-implementation,Plan Create Implementation,task,creation,Agent;Worker,task;creation;plan;create;implementation,.aiox-core/development/tasks/plan-create-implementation.md,active
+plan-execute-subtask,Plan Execute Subtask,task,general,Agent;Worker,task;general;plan;execute;subtask,.aiox-core/development/tasks/plan-execute-subtask.md,active
+po-backlog-add,Po Backlog Add,task,general,Agent;Worker,task;general;backlog;add;product,.aiox-core/development/tasks/po-backlog-add.md,active
+po-close-story,Po Close Story,task,general,Agent;Worker,task;general;close;story;product,.aiox-core/development/tasks/po-close-story.md,active
+po-manage-story-backlog,Po Manage Story Backlog,task,general,Agent;Worker,task;general;manage;story;backlog;product,.aiox-core/development/tasks/po-manage-story-backlog.md,active
+po-pull-story,Po Pull Story,task,general,Agent;Worker,task;general;pull;story;product,.aiox-core/development/tasks/po-pull-story.md,active
+po-pull-story-from-clickup,Po Pull Story From Clickup,task,general,Agent;Worker,task;general;pull;story;from;clickup;product,.aiox-core/development/tasks/po-pull-story-from-clickup.md,active
+po-stories-index,Po Stories Index,task,general,Agent;Worker,task;general;stories;index;product,.aiox-core/development/tasks/po-stories-index.md,active
+po-sync-story,Po Sync Story,task,general,Agent;Worker,task;general;sync;story;product,.aiox-core/development/tasks/po-sync-story.md,active
+po-sync-story-to-clickup,Po Sync Story To Clickup,task,general,Agent;Worker,task;general;sync;story;clickup;product,.aiox-core/development/tasks/po-sync-story-to-clickup.md,active
+pr-automation,Pr Automation,task,general,Agent;Worker,task;general;automation,.aiox-core/development/tasks/pr-automation.md,active
+project-status,Project Status,task,general,Agent;Worker,task;general;project;status,.aiox-core/development/tasks/project-status.md,active
+propose-modification,Propose Modification,task,general,Agent;Worker,task;general;propose;modification;product,.aiox-core/development/tasks/propose-modification.md,active
+publish-npm,Publish Npm,task,general,Agent;Worker,task;general;publish;npm,.aiox-core/development/tasks/publish-npm.md,active
+qa-after-creation,Qa After Creation,task,general,Agent;Worker,task;general;after;creation;testing,.aiox-core/development/tasks/qa-after-creation.md,active
+qa-backlog-add-followup,Qa Backlog Add Followup,task,general,Agent;Worker,task;general;backlog;add;followup;testing,.aiox-core/development/tasks/qa-backlog-add-followup.md,active
+qa-browser-console-check,Qa Browser Console Check,task,general,Agent;Worker,task;general;browser;console;check;testing;validation,.aiox-core/development/tasks/qa-browser-console-check.md,active
+qa-create-fix-request,Qa Create Fix Request,task,creation,Agent;Worker,task;creation;create;fix;request;testing,.aiox-core/development/tasks/qa-create-fix-request.md,active
+qa-evidence-requirements,Qa Evidence Requirements,task,general,Agent;Worker,task;general;evidence;requirements;testing,.aiox-core/development/tasks/qa-evidence-requirements.md,active
+qa-false-positive-detection,Qa False Positive Detection,task,general,Agent;Worker,task;general;false;positive;detection;testing;product,.aiox-core/development/tasks/qa-false-positive-detection.md,active
+qa-fix-issues,Qa Fix Issues,task,general,Agent;Worker,task;general;fix;issues;testing,.aiox-core/development/tasks/qa-fix-issues.md,active
+qa-gate,Qa Gate,task,general,Agent;Worker,task;general;gate;testing,.aiox-core/development/tasks/qa-gate.md,active
+qa-generate-tests,Qa Generate Tests,task,general,Agent;Worker,task;general;generate;tests;testing;creation,.aiox-core/development/tasks/qa-generate-tests.md,active
+qa-library-validation,Qa Library Validation,task,general,Agent;Worker,task;general;library;validation;testing,.aiox-core/development/tasks/qa-library-validation.md,active
+qa-migration-validation,Qa Migration Validation,task,general,Agent;Worker,task;general;migration;validation;testing,.aiox-core/development/tasks/qa-migration-validation.md,active
+qa-nfr-assess,Qa Nfr Assess,task,general,Agent;Worker,task;general;nfr;assess;testing,.aiox-core/development/tasks/qa-nfr-assess.md,active
+qa-review-build,Qa Review Build,task,general,Agent;Worker,task;general;review;build;testing,.aiox-core/development/tasks/qa-review-build.md,active
+qa-review-proposal,Qa Review Proposal,task,general,Agent;Worker,task;general;review;proposal;testing;product,.aiox-core/development/tasks/qa-review-proposal.md,active
+qa-review-story,Qa Review Story,task,general,Agent;Worker,task;general;review;story;testing;product,.aiox-core/development/tasks/qa-review-story.md,active
+qa-risk-profile,Qa Risk Profile,task,general,Agent;Worker,task;general;risk;profile;testing,.aiox-core/development/tasks/qa-risk-profile.md,active
+qa-run-tests,Qa Run Tests,task,general,Agent;Worker,task;general;run;tests;testing,.aiox-core/development/tasks/qa-run-tests.md,active
+qa-security-checklist,Qa Security Checklist,task,general,Agent;Worker,task;general;security;checklist;testing;validation,.aiox-core/development/tasks/qa-security-checklist.md,active
+qa-test-design,Qa Test Design,task,general,Agent;Worker,task;general;test;design;testing,.aiox-core/development/tasks/qa-test-design.md,active
+qa-trace-requirements,Qa Trace Requirements,task,general,Agent;Worker,task;general;trace;requirements;testing,.aiox-core/development/tasks/qa-trace-requirements.md,active
+readme,Readme,task,general,Agent;Worker,task;general;readme,.aiox-core/development/tasks/blocks/README.md,active
+release-management,Release Management,task,general,Agent;Worker,task;general;release;management,.aiox-core/development/tasks/release-management.md,active
+remove-mcp,Remove Mcp,task,general,Agent;Worker,task;general;remove;mcp,.aiox-core/development/tasks/remove-mcp.md,active
+remove-worktree,Remove Worktree,task,general,Agent;Worker,task;general;remove;worktree,.aiox-core/development/tasks/remove-worktree.md,active
+resolve-github-issue,Resolve Github Issue,task,general,Agent;Worker,task;general;resolve;github;issue;git,.aiox-core/development/tasks/resolve-github-issue.md,active
+review-contributor-pr,Review Contributor Pr,task,general,Agent;Worker,task;general;review;contributor,.aiox-core/development/tasks/review-contributor-pr.md,active
+run-design-system-pipeline,Run Design System Pipeline,task,general,Agent;Worker,task;general;run;design;system;pipeline,.aiox-core/development/tasks/run-design-system-pipeline.md,active
+run-workflow,Run Workflow,task,general,Agent;Worker,task;general;run;workflow,.aiox-core/development/tasks/run-workflow.md,active
+run-workflow-engine,Run Workflow Engine,task,general,Agent;Worker,task;general;run;workflow;engine,.aiox-core/development/tasks/run-workflow-engine.md,active
+search-mcp,Search Mcp,task,general,Agent;Worker,task;general;search;mcp,.aiox-core/development/tasks/search-mcp.md,active
+security-audit,Security Audit,task,validation,Agent;Worker,task;validation;security;audit;analysis,.aiox-core/development/tasks/security-audit.md,active
+security-scan,Security Scan,task,general,Agent;Worker,task;general;security;scan,.aiox-core/development/tasks/security-scan.md,active
+session-resume,Session Resume,task,general,Agent;Worker,task;general;session;resume,.aiox-core/development/tasks/session-resume.md,active
+setup-database,Setup Database,task,general,Agent;Worker,task;general;setup;database,.aiox-core/development/tasks/setup-database.md,active
+setup-design-system,Setup Design System,task,general,Agent;Worker,task;general;setup;design;system,.aiox-core/development/tasks/setup-design-system.md,active
+setup-github,Setup Github,task,general,Agent;Worker,task;general;setup;github;git,.aiox-core/development/tasks/setup-github.md,active
+setup-llm-routing,Setup Llm Routing,task,general,Agent;Worker,task;general;setup;llm;routing,.aiox-core/development/tasks/setup-llm-routing.md,active
+setup-mcp-docker,Setup Mcp Docker,task,general,Agent;Worker,task;general;setup;mcp;docker,.aiox-core/development/tasks/setup-mcp-docker.md,active
+setup-project-docs,Setup Project Docs,task,general,Agent;Worker,task;general;setup;project;docs,.aiox-core/development/tasks/setup-project-docs.md,active
+shard-doc,Shard Doc,task,general,Agent;Worker,task;general;shard;doc,.aiox-core/development/tasks/shard-doc.md,active
+sm-create-next-story,Sm Create Next Story,task,creation,Agent;Worker,task;creation;create;next;story;product,.aiox-core/development/tasks/sm-create-next-story.md,active
+spec-assess-complexity,Spec Assess Complexity,task,general,Agent;Worker,task;general;spec;assess;complexity,.aiox-core/development/tasks/spec-assess-complexity.md,active
+spec-critique,Spec Critique,task,general,Agent;Worker,task;general;spec;critique,.aiox-core/development/tasks/spec-critique.md,active
+spec-gather-requirements,Spec Gather Requirements,task,general,Agent;Worker,task;general;spec;gather;requirements,.aiox-core/development/tasks/spec-gather-requirements.md,active
+spec-research-dependencies,Spec Research Dependencies,task,general,Agent;Worker,task;general;spec;research;dependencies,.aiox-core/development/tasks/spec-research-dependencies.md,active
+spec-write-spec,Spec Write Spec,task,general,Agent;Worker,task;general;spec;write,.aiox-core/development/tasks/spec-write-spec.md,active
+squad-creator-analyze,Squad Creator Analyze,task,analysis,Agent;Worker,task;analysis;squad;creator;analyze,.aiox-core/development/tasks/squad-creator-analyze.md,active
+squad-creator-create,Squad Creator Create,task,creation,Agent;Worker,task;creation;squad;creator;create,.aiox-core/development/tasks/squad-creator-create.md,active
+squad-creator-design,Squad Creator Design,task,general,Agent;Worker,task;general;squad;creator;design,.aiox-core/development/tasks/squad-creator-design.md,active
+squad-creator-download,Squad Creator Download,task,general,Agent;Worker,task;general;squad;creator;download,.aiox-core/development/tasks/squad-creator-download.md,active
+squad-creator-extend,Squad Creator Extend,task,general,Agent;Worker,task;general;squad;creator;extend,.aiox-core/development/tasks/squad-creator-extend.md,active
+squad-creator-list,Squad Creator List,task,general,Agent;Worker,task;general;squad;creator;list,.aiox-core/development/tasks/squad-creator-list.md,active
+squad-creator-migrate,Squad Creator Migrate,task,general,Agent;Worker,task;general;squad;creator;migrate,.aiox-core/development/tasks/squad-creator-migrate.md,active
+squad-creator-publish,Squad Creator Publish,task,general,Agent;Worker,task;general;squad;creator;publish,.aiox-core/development/tasks/squad-creator-publish.md,active
+squad-creator-sync-ide-command,Squad Creator Sync Ide Command,task,general,Agent;Worker,task;general;squad;creator;sync;ide;command,.aiox-core/development/tasks/squad-creator-sync-ide-command.md,active
+squad-creator-sync-synkra,Squad Creator Sync Synkra,task,general,Agent;Worker,task;general;squad;creator;sync;synkra,.aiox-core/development/tasks/squad-creator-sync-synkra.md,active
+squad-creator-validate,Squad Creator Validate,task,validation,Agent;Worker,task;validation;squad;creator;validate,.aiox-core/development/tasks/squad-creator-validate.md,active
+story-checkpoint,Story Checkpoint,task,general,Agent;Worker,task;general;story;checkpoint;validation;product,.aiox-core/development/tasks/story-checkpoint.md,active
+sync-documentation,Sync Documentation,task,general,Agent;Worker,task;general;sync;documentation,.aiox-core/development/tasks/sync-documentation.md,active
+sync-registry-intel,Sync Registry Intel,task,general,Agent;Worker,task;general;sync;registry;intel,.aiox-core/development/tasks/sync-registry-intel.md,active
+tailwind-upgrade,Tailwind Upgrade,task,general,Agent;Worker,task;general;tailwind;upgrade,.aiox-core/development/tasks/tailwind-upgrade.md,active
+test-as-user,Test As User,task,general,Agent;Worker,task;general;test;user;testing,.aiox-core/development/tasks/test-as-user.md,active
+test-validation-task,Test Validation Task,task,general,Agent;Worker,task;general;test;validation;testing,.aiox-core/development/tasks/test-validation-task.md,active
+triage-github-issues,Triage Github Issues,task,general,Agent;Worker,task;general;triage;github;issues;git,.aiox-core/development/tasks/triage-github-issues.md,active
+undo-last,Undo Last,task,general,Agent;Worker,task;general;undo;last,.aiox-core/development/tasks/undo-last.md,active
+update-aiox,Update Aiox,task,general,Agent;Worker,task;general;update;aiox,.aiox-core/development/tasks/update-aiox.md,active
+update-manifest,Update Manifest,task,general,Agent;Worker,task;general;update;manifest,.aiox-core/development/tasks/update-manifest.md,active
+update-source-tree,Update Source Tree,task,general,Agent;Worker,task;general;update;source;tree,.aiox-core/development/tasks/update-source-tree.md,active
+ux-create-wireframe,Ux Create Wireframe,task,creation,Agent;Worker,task;creation;create;wireframe,.aiox-core/development/tasks/ux-create-wireframe.md,active
+ux-ds-scan-artifact,Ux Ds Scan Artifact,task,general,Agent;Worker,task;general;scan;artifact,.aiox-core/development/tasks/ux-ds-scan-artifact.md,active
+ux-user-research,Ux User Research,task,general,Agent;Worker,task;general;user;research,.aiox-core/development/tasks/ux-user-research.md,active
+validate-agents,Validate Agents,task,validation,Agent;Worker,task;validation;validate;agents,.aiox-core/development/tasks/validate-agents.md,active
+validate-next-story,Validate Next Story,task,validation,Agent;Worker,task;validation;validate;next;story;product,.aiox-core/development/tasks/validate-next-story.md,active
+validate-tech-preset,Validate Tech Preset,task,validation,Agent;Worker,task;validation;validate;tech;preset,.aiox-core/development/tasks/validate-tech-preset.md,active
+validate-workflow,Validate Workflow,task,validation,Agent;Worker,task;validation;validate;workflow,.aiox-core/development/tasks/validate-workflow.md,active
+verify-subtask,Verify Subtask,task,general,Agent;Worker,task;general;verify;subtask,.aiox-core/development/tasks/verify-subtask.md,active
+waves,Waves,task,general,Agent;Worker,task;general;waves,.aiox-core/development/tasks/waves.md,active
+yolo-toggle,Yolo Toggle,task,general,Agent;Worker,task;general;yolo;toggle,.aiox-core/development/tasks/yolo-toggle.md,active
+activation-instructions-template,Activation Instructions Template,template,document,Agent,template;document;activation;instructions,.aiox-core/product/templates/activation-instructions-template.md,active
+antigravity-rules,Antigravity Rules,template,ide-rules,Agent,template;ide-rules;antigravity;rules,.aiox-core/product/templates/ide-rules/antigravity-rules.md,active
+changelog-template,Changelog Template,template,document,Agent,template;document;changelog,.aiox-core/product/templates/changelog-template.md,active
+claude-rules,Claude Rules,template,ide-rules,Agent,template;ide-rules;claude;rules,.aiox-core/product/templates/ide-rules/claude-rules.md,active
+codex-rules,Codex Rules,template,ide-rules,Agent,template;ide-rules;codex;rules,.aiox-core/product/templates/ide-rules/codex-rules.md,active
+command-rationalization-matrix,Command Rationalization Matrix,template,document,Agent,template;document;command;rationalization;matrix,.aiox-core/product/templates/command-rationalization-matrix.md,active
+copilot-rules,Copilot Rules,template,ide-rules,Agent,template;ide-rules;copilot;rules,.aiox-core/product/templates/ide-rules/copilot-rules.md,active
+current-approach-tmpl,Current Approach Tmpl,template,document,Agent,template;document;current;approach;tmpl,.aiox-core/product/templates/current-approach-tmpl.md,active
+cursor-rules,Cursor Rules,template,ide-rules,Agent,template;ide-rules;cursor;rules,.aiox-core/product/templates/ide-rules/cursor-rules.md,active
+ds-artifact-analysis,Ds Artifact Analysis,template,document,Agent,template;document;artifact;analysis,.aiox-core/product/templates/ds-artifact-analysis.md,active
+gemini-rules,Gemini Rules,template,ide-rules,Agent,template;ide-rules;gemini;rules,.aiox-core/product/templates/ide-rules/gemini-rules.md,active
+github-pr-template,Github Pr Template,template,document,Agent,template;document;github;git,.aiox-core/product/templates/github-pr-template.md,active
+grok-rules,Grok Rules,template,ide-rules,Agent,template;ide-rules;grok;rules,.aiox-core/product/templates/ide-rules/grok-rules.md,active
+migration-strategy-tmpl,Migration Strategy Tmpl,template,document,Agent,template;document;migration;strategy;tmpl,.aiox-core/product/templates/migration-strategy-tmpl.md,active
+personalized-agent-template,Personalized Agent Template,template,personalized,Agent,template;personalized;agent,.aiox-core/product/templates/personalized-agent-template.md,active
+personalized-checklist-template,Personalized Checklist Template,template,personalized,Agent,template;personalized;checklist;validation,.aiox-core/product/templates/personalized-checklist-template.md,active
+personalized-task-template,Personalized Task Template,template,personalized,Agent,template;personalized;task,.aiox-core/product/templates/personalized-task-template.md,active
+personalized-task-template-v2,Personalized Task Template V2,template,personalized,Agent,template;personalized;task,.aiox-core/product/templates/personalized-task-template-v2.md,active
+qa-report-tmpl,Qa Report Tmpl,template,document,Agent,template;document;report;tmpl;testing;product,.aiox-core/product/templates/qa-report-tmpl.md,active
+spec-tmpl,Spec Tmpl,template,document,Agent,template;document;spec;tmpl,.aiox-core/product/templates/spec-tmpl.md,active
+task-execution-report,Task Execution Report,template,document,Agent,template;document;task;execution;report;product,.aiox-core/product/templates/task-execution-report.md,active
+task-template,Task Template,template,document,Agent,template;document;task,.aiox-core/product/templates/task-template.md,active
+auto-worktree,Auto Worktree,workflow,general,Agent;Worker,workflow;general;auto;worktree,.aiox-core/development/workflows/auto-worktree.yaml,active
+brownfield-discovery,Brownfield Discovery,workflow,brownfield,Agent;Worker,workflow;brownfield;discovery,.aiox-core/development/workflows/brownfield-discovery.yaml,active
+brownfield-fullstack,Brownfield Fullstack,workflow,brownfield,Agent;Worker,workflow;brownfield;fullstack,.aiox-core/development/workflows/brownfield-fullstack.yaml,active
+brownfield-service,Brownfield Service,workflow,brownfield,Agent;Worker,workflow;brownfield;service,.aiox-core/development/workflows/brownfield-service.yaml,active
+brownfield-ui,Brownfield Ui,workflow,brownfield,Agent;Worker,workflow;brownfield,.aiox-core/development/workflows/brownfield-ui.yaml,active
+design-system-build-quality,Design System Build Quality,workflow,general,Agent;Worker,workflow;general;design;system;build;quality,.aiox-core/development/workflows/design-system-build-quality.yaml,active
+development-cycle,Development Cycle,workflow,general,Agent;Worker,workflow;general;development;cycle,.aiox-core/development/workflows/development-cycle.yaml,active
+epic-orchestration,Epic Orchestration,workflow,general,Agent;Worker,workflow;general;epic;orchestration,.aiox-core/development/workflows/epic-orchestration.yaml,active
+greenfield-fullstack,Greenfield Fullstack,workflow,greenfield,Agent;Worker,workflow;greenfield;fullstack,.aiox-core/development/workflows/greenfield-fullstack.yaml,active
+greenfield-service,Greenfield Service,workflow,greenfield,Agent;Worker,workflow;greenfield;service,.aiox-core/development/workflows/greenfield-service.yaml,active
+greenfield-ui,Greenfield Ui,workflow,greenfield,Agent;Worker,workflow;greenfield,.aiox-core/development/workflows/greenfield-ui.yaml,active
+qa-loop,Qa Loop,workflow,general,Agent;Worker,workflow;general;loop;testing,.aiox-core/development/workflows/qa-loop.yaml,active
+spec-pipeline,Spec Pipeline,workflow,general,Agent;Worker,workflow;general;spec;pipeline,.aiox-core/development/workflows/spec-pipeline.yaml,active
+story-development-cycle,Story Development Cycle,workflow,general,Agent;Worker,workflow;general;story;development;cycle;product,.aiox-core/development/workflows/story-development-cycle.yaml,active
