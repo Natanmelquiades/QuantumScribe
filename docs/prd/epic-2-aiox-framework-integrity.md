@@ -48,3 +48,4 @@ A auditoria do framework encontrou uma instalação local baseada na versão 5.4
 Implementação concluída e validada localmente. A publicação remota permanece fora desta epic e requer `@devops` com confirmação explícita.
 
 <!-- [closure-key: 2.2:digest:working-tree-digest:4e0fd17e310a8ce4609b98298ed83715431c93ef53e14e8989050063719096c0] -->
+<!-- [closure-key: 2.3:commit:02448f295ec435be09790642c584cfd565559fba] -->
