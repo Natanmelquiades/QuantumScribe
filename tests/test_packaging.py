@@ -14,6 +14,18 @@ def test_project_versions_stay_in_sync():
     assert metadata["project"]["version"] == match.group(1)
 
 
+def test_changelog_starts_at_runtime_version():
+    init_text = (ROOT / "localwhisper" / "__init__.py").read_text(encoding="utf-8")
+    version_match = re.search(r'__version__\s*=\s*"([^"]+)"', init_text)
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    heading_match = re.search(r"^## \[([^\]]+)\]", changelog, re.MULTILINE)
+
+    assert version_match is not None
+    assert heading_match is not None
+    assert heading_match.group(1) == "Não publicado"
+    assert re.search(r"^## \[" + re.escape(version_match.group(1)) + r"\]", changelog, re.MULTILINE)
+
+
 def test_windows_packaging_sources_exist():
     expected = (
         ROOT / "localwhisper" / "assets" / "icon.png",
@@ -40,8 +52,8 @@ def test_linux_packaging_sources_exist():
     build_script = (ROOT / "build_linux.sh").read_text(encoding="utf-8")
     spec = (ROOT / "QuantumScribe-Linux.spec").read_text(encoding="utf-8")
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert 'pip install -r requirements-linux.txt' in build_script
-    assert build_script.index('pip install -r requirements-linux.txt') > build_script.index('fi\n')
+    assert 'pip install --require-hashes -r requirements-build-linux.lock' in build_script
+    assert 'pip install "pyinstaller>=6.18,<7"' not in build_script
     assert "'PIL._tkinter_finder'" in spec
     assert "'gi.repository.AyatanaAppIndicator3'" in spec
     assert "tray-icon.png" in spec
@@ -72,7 +84,10 @@ def test_core_explicitly_excludes_heavy_optional_runtimes():
     assert "'torch'" in spec
     assert "'silero_vad'" in spec
     assert "'nvidia'" in spec
+    assert "hiddenimports = ['onnxruntime'" not in spec
     assert "'onnxruntime'" in spec
+    assert "'scipy'" not in spec
+    assert "'noisereduce'" not in spec
 
 
 def test_release_build_separates_core_and_optional_components():
@@ -86,9 +101,24 @@ def test_release_build_separates_core_and_optional_components():
     assert "QuantumScribe-Core-$version-Linux-x64.tar.gz" in release
     assert "Compress-Archive" not in release
     assert '"QuantumScribe-Core-$version-Windows-x64.zip",' not in release
-    assert 'gh release download $tag --pattern "SHA256SUMS-Linux.txt"' in release
-    assert 'gh release delete-asset $tag "SHA256SUMS-Linux.txt" --yes' in release
-    assert "gh release edit $tag --draft=false --latest" in release
+    assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in release
+    assert "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" in release
+    assert "needs: [build-linux, build-windows]" in release
+    assert "permissions:\n      contents: write" in release
+    assert 'gh release edit "$tag" --draft=false --latest' in release
+
+
+def test_build_scripts_enforce_core_inventory():
+    windows = (ROOT / "build.ps1").read_text(encoding="utf-8")
+    linux = (ROOT / "build_linux.sh").read_text(encoding="utf-8")
+
+    assert "requirements-build.lock" in windows
+    assert "--require-hashes" in windows
+    assert "inventory_bundle.py" in windows
+    assert "--max-bytes 262144000" in windows
+    assert "requirements-build-linux.lock" in linux
+    assert "--require-hashes" in linux
+    assert "inventory_bundle.py" in linux
 
 
 def test_backup_feature_is_not_shipped():

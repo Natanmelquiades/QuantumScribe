@@ -1,1 +1,2 @@
--r requirements-common.txt
+# Alias compatível para instalações CPU.
+-r requirements-core.in

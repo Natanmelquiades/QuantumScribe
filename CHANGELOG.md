@@ -4,6 +4,21 @@ Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
 
 ## [Não publicado]
 
+## [2.2.34] - 2026-08-18
+
+### Corrigido
+- Isolado o ciclo de vida de cada sessão de transcrição, evitando resultados,
+  HUD ou colagens tardias de uma sessão cancelada.
+- Validados conflitos de atalhos, seleção de modelos e inicialização de áudio
+  virtual no Windows, com fallback seguro para o dispositivo original.
+- Separados os manifestos Core, CPU, Linux, build e componentes opcionais, com
+  locks reproduzíveis e validação dos arquivos referenciados.
+
+### Qualidade
+- Adicionada validação automática para manter a versão do runtime, metadados de
+  projeto e changelog sincronizados.
+- Consolidada a base AIOX e seus validadores no fluxo de qualidade do projeto.
+
 ## [2.2.24] - 2026-07-30
 
 ### Adicionado

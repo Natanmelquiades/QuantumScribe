@@ -1,0 +1,11 @@
+# QuantumScribe Core — runtime CPU mínimo.
+# Dependências opcionais (CUDA, VAD neural, redução de ruído e ONNX) ficam fora
+# deste perfil e são carregadas somente após uma ação explícita do usuário.
+faster-whisper>=1.1.1,<2.0
+ctranslate2>=4.5,<4.7
+numpy>=2.1,<2.5
+sounddevice>=0.5.1,<1.0
+pystray>=0.19.5,<1.0
+Pillow>=11.0,<13.0
+tokenizers>=0.20,<1.0
+huggingface-hub>=0.25,<1.0

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -26,6 +27,7 @@ class AppConfig:
     compute_type: str = "auto"     # Seleciona uma precisão suportada pelo dispositivo efetivo
     preload_model: bool = False    # Carregar sob demanda para manter inicialização e bandeja responsivas
     auto_download_model: bool = False  # Compatibilidade: downloads silenciosos permanecem desativados
+    start_with_windows: bool = False  # Inicia automaticamente para a conta atual do Windows
     auto_paste: bool = True        # Insere automaticamente o texto no local focado após a transcrição
     hotkey: str = "Ctrl+Space"     # Atalho de teclado global para iniciar/parar gravação
     initial_prompt: str = (
@@ -188,10 +190,27 @@ def save_config(config: AppConfig) -> None:
     config.normalize()
     data = asdict(config)
     data.pop("effective_model", None)
-    config_path().write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            json.dump(data, temporary, ensure_ascii=False, indent=2)
+            temporary.write("\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def is_model_downloaded(model_name: str) -> bool:

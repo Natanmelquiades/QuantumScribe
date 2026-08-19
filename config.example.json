@@ -5,6 +5,7 @@
   "compute_type": "auto",
   "preload_model": false,
   "auto_download_model": false,
+  "start_with_windows": false,
   "auto_paste": true,
   "hotkey": "Ctrl+Space",
   "hotkey_translate": "Ctrl+Alt+Space",

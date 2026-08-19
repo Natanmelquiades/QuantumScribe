@@ -306,6 +306,7 @@ Opções importantes:
 - `punctuation_assist`: melhora sinais terminais e pausas;
 - `preload_model`: se `false`, carrega o modelo no primeiro ditado;
 - `auto_download_model`: mantido por compatibilidade e sempre desativado; downloads exigem confirmação;
+- `start_with_windows`: inicia o app automaticamente para o usuário atual do Windows;
 - `device`: `auto` (padrão) prioriza GPU NVIDIA e recua preventivamente para CPU; `cpu` força CPU;
 - `auto_paste`: insere o resultado no campo capturado;
 - `use_llm_rewriter`: habilita reescrita opcional — desligada por padrão.

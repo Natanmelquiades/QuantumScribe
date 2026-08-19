@@ -1,5 +1,6 @@
 import pytest
 
+from localwhisper import config as config_module
 from localwhisper.config import AppConfig, is_model_downloaded, load_config, model_snapshot_path, save_config
 
 
@@ -117,3 +118,34 @@ def test_complete_model_snapshot_is_detected(temp_appdata):
 
     assert is_model_downloaded("small") is True
     assert model_snapshot_path("small") == snapshot
+
+
+def test_replace_failure_preserves_previous_config_and_cleans_temporary_file(temp_appdata, monkeypatch):
+    config = load_config()
+    config_file = temp_appdata / "QuantumScribe" / "config.json"
+    original = config_file.read_bytes()
+    config.language = "en"
+
+    def fail_replace(source, destination):
+        raise OSError("substituição simulada")
+
+    monkeypatch.setattr(config_module.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="substituição simulada"):
+        save_config(config)
+
+    assert config_file.read_bytes() == original
+    assert list(config_file.parent.glob(".config.json.*.tmp")) == []
+
+
+def test_write_failure_preserves_previous_config_and_cleans_temporary_file(temp_appdata):
+    config = load_config()
+    config_file = temp_appdata / "QuantumScribe" / "config.json"
+    original = config_file.read_bytes()
+    config.custom_dict = {"invalid": object()}
+
+    with pytest.raises(TypeError):
+        save_config(config)
+
+    assert config_file.read_bytes() == original
+    assert list(config_file.parent.glob(".config.json.*.tmp")) == []

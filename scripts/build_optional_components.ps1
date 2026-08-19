@@ -10,6 +10,43 @@ if (-not $Version) {
     $Version = $VersionLine.Matches[0].Groups[1].Value
 }
 
+function Write-ComponentManifest {
+    param(
+        [string]$Key,
+        [string]$Stage,
+        [string[]]$RequiredFiles
+    )
+
+    foreach ($Relative in $RequiredFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Stage $Relative) -PathType Leaf)) {
+            throw "Arquivo obrigatório ausente no componente ${Key}: $Relative"
+        }
+    }
+
+    $Files = @(
+        Get-ChildItem -LiteralPath $Stage -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object {
+                $Relative = [IO.Path]::GetRelativePath($Stage, $_.FullName).Replace('\', '/')
+                [ordered]@{
+                    path = $Relative
+                    bytes = $_.Length
+                    sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                }
+            }
+    )
+    if ($Files.Count -eq 0) { throw "Componente ${Key} vazio." }
+
+    $Manifest = [ordered]@{
+        schema = 1
+        key = $Key
+        version = $Version
+        required_files = $RequiredFiles
+        files = $Files
+    }
+    $Manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $Stage "component.json") -Encoding utf8
+}
+
 $Dist = Join-Path $ProjectRoot "dist"
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 $ComponentRoot = Join-Path $ProjectRoot ".component-build"
@@ -59,9 +96,18 @@ try {
         if (-not $License) { throw "Licença obrigatória não encontrada: $TargetName" }
         Copy-Item -LiteralPath $License.FullName -Destination (Join-Path $CudaStage $TargetName)
     }
+    Write-ComponentManifest -Key "cuda" -Stage $CudaStage -RequiredFiles @(
+        "nvidia/cublas/bin/cublas64_12.dll",
+        "nvidia/cublas/bin/cublasLt64_12.dll",
+        "nvidia/cudnn/bin/cudnn64_9.dll"
+    )
     $CudaZip = Join-Path $Dist "QuantumScribe-CUDA-$Version-Windows-x64.zip"
     if (Test-Path -LiteralPath $CudaZip) { Remove-Item -LiteralPath $CudaZip -Force }
     Compress-Archive -Path (Join-Path $CudaStage "*") -DestinationPath $CudaZip -CompressionLevel Optimal
+    & python scripts\validate_component_archive.py $CudaZip --key cuda --version $Version `
+        --required "nvidia/cublas/bin/cublas64_12.dll" `
+        --required "nvidia/cudnn/bin/cudnn64_9.dll"
+    if ($LASTEXITCODE -ne 0) { throw "Componente CUDA falhou na validação do manifesto." }
 
     # Silero: baixa a wheel com hash fixado e extrai somente o modelo ONNX.
     $VadDownload = Join-Path $ComponentRoot "vad-download"
@@ -83,9 +129,12 @@ try {
     } finally {
         $Archive.Dispose()
     }
+    Write-ComponentManifest -Key "silero_vad" -Stage $VadStage -RequiredFiles @("silero_vad.onnx")
     $VadZip = Join-Path $Dist "QuantumScribe-SileroVAD-$Version-Windows-x64.zip"
     if (Test-Path -LiteralPath $VadZip) { Remove-Item -LiteralPath $VadZip -Force }
     Compress-Archive -Path (Join-Path $VadStage "*") -DestinationPath $VadZip -CompressionLevel Optimal
+    & python scripts\validate_component_archive.py $VadZip --key silero_vad --version $Version --required "silero_vad.onnx"
+    if ($LASTEXITCODE -ne 0) { throw "Componente Silero VAD falhou na validação do manifesto." }
 
     Write-Host "Componentes criados:"
     Write-Host "  $CudaZip"

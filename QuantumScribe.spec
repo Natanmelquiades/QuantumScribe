@@ -6,9 +6,11 @@ datas = [
     ('localwhisper/assets/tray-icon.png', 'localwhisper/assets'),
 ]
 binaries = []
-hiddenimports = ['onnxruntime', 'scipy', 'noisereduce', 'huggingface_hub']
+hiddenimports = ['huggingface_hub']
 tmp_ret = collect_all('faster_whisper')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+datas += [item for item in tmp_ret[0] if 'silero_vad' not in str(item[0]).lower()]
+binaries += tmp_ret[1]
+hiddenimports += [name for name in tmp_ret[2] if 'silero_vad' not in name.lower()]
 tmp_ret = collect_all('ctranslate2')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('av')
@@ -23,7 +25,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'torch', 'torchaudio', 'silero_vad', 'nvidia',
+        'torch', 'torchaudio', 'silero_vad', 'nvidia', 'onnxruntime',
         # noisereduce possui um módulo opcional de gráficos; o aplicativo usa
         # apenas o filtro espectral e não deve carregar uma stack de plotting.
         'matplotlib', 'contourpy', 'cycler', 'fonttools', 'kiwisolver',

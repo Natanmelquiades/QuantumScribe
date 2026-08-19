@@ -27,8 +27,10 @@ from .audio import AudioRecorder
 from .config import AppConfig, load_config, save_config
 from .diary import save_entry
 from .hotkey import EscapeHotkey, GlobalHotkey
+from .session_controller import SessionController
 from .settings_ui import SettingsWindow, load_or_generate_icon
 from .sounds import play_cancel_sound, play_end_sound, play_start_sound
+from .startup import set_startup_enabled, supports_startup
 from .transcriber import LocalTranscriber
 from .tray import TrayIcon
 from .ui import Popup
@@ -77,9 +79,8 @@ class QuantumScribeApp:
         self.target_window = WindowTarget(0)
         self.processing = False
         self.starting = False
+        self._session_controller = SessionController()
         self._transcription_thread: threading.Thread | None = None
-        self._active_transcription_job: int | None = None
-        self._next_transcription_job = 0
         self._transcription_context = threading.local()
         self._recording_session = 0
         self._cancel_confirmation_pending_session: int | None = None
@@ -187,6 +188,18 @@ class QuantumScribeApp:
     def run(self) -> None:
         """Inicia a aplicação executando os loops de escuta e o loop principal do Tkinter."""
         self.tray.start()
+        # Reescreve o comando quando a preferência está ativa (por exemplo,
+        # após uma atualização que mudou o caminho do executável). Falhas são
+        # visíveis, mas não impedem o aplicativo de abrir normalmente.
+        if getattr(self.config, "start_with_windows", False) and supports_startup():
+            try:
+                set_startup_enabled(True)
+            except OSError as error:
+                self.popup.show_message(
+                    "Inicialização com o Windows",
+                    f"Não foi possível atualizar a inicialização automática: {error}",
+                    error=True,
+                )
         # A preparação é automática quanto ao hardware, mas nenhum pacote é baixado
         # antes de o usuário confirmar claramente o plano e o tamanho aproximado.
         self.root.after(900, self._offer_initial_setup)
@@ -270,28 +283,47 @@ class QuantumScribeApp:
 
     def _is_active_transcription_job(self, job_id: int) -> bool:
         """Indica se um worker ainda pertence à transcrição que está em foco."""
-        return getattr(self, "_active_transcription_job", None) == job_id
+        return self._get_session_controller().is_active(job_id)
 
     def _schedule_for_active_transcription_job(self, job_id: int, callback: Callable[[], None]) -> None:
         """Agenda uma atualização de UI apenas para o job de transcrição vigente."""
-        def run_if_current() -> None:
-            if self._is_active_transcription_job(job_id):
-                callback()
-
-        self.root.after(0, run_if_current)
+        self._get_session_controller().schedule_if_active(
+            job_id,
+            lambda scheduled: self.root.after(0, scheduled),
+            callback,
+        )
 
     def _finish_active_transcription_job(self, job_id: int, callback: Callable[[], None]) -> None:
         """Mostra o resultado final e só então encerra a identidade do job."""
-        def finish_if_current() -> None:
-            if not self._is_active_transcription_job(job_id):
-                return
-            try:
-                callback()
-            finally:
-                if self._is_active_transcription_job(job_id):
-                    self._active_transcription_job = None
+        self._get_session_controller().finish_if_active(
+            job_id,
+            lambda scheduled: self.root.after(0, scheduled),
+            callback,
+        )
 
-        self.root.after(0, finish_if_current)
+    def _get_session_controller(self) -> SessionController:
+        """Obtém o controller também para testes que constroem a fachada sem __init__."""
+        controller = getattr(self, "_session_controller", None)
+        if controller is None:
+            controller = SessionController()
+            self._session_controller = controller
+        return controller
+
+    @property
+    def _active_transcription_job(self) -> int | None:
+        return self._get_session_controller().active_job_id
+
+    @_active_transcription_job.setter
+    def _active_transcription_job(self, job_id: int | None) -> None:
+        self._get_session_controller().set_active_job(job_id)
+
+    @property
+    def _next_transcription_job(self) -> int:
+        return self._get_session_controller().next_job_id
+
+    @_next_transcription_job.setter
+    def _next_transcription_job(self, job_id: int) -> None:
+        self._get_session_controller().set_next_job_id(job_id)
 
     def open_config_from_thread(self, *_args: object) -> None:
         """Abre o arquivo de configurações do usuário."""
@@ -417,9 +449,7 @@ class QuantumScribeApp:
         """Finaliza a captação de áudio e inicia o pipeline assíncrono de transcrição."""
         self.processing = True
         self._recording_session += 1
-        self._next_transcription_job += 1
-        job_id = self._next_transcription_job
-        self._active_transcription_job = job_id
+        job_id = self._get_session_controller().start_job()
         self._cancel_confirmation_pending_session = None
         self.popup.clear_cancel_hold()
         self.esc_hotkey.unregister()
@@ -1158,7 +1188,24 @@ class QuantumScribeApp:
     def save_and_apply_config(self, new_config: AppConfig) -> None:
         """Salva a nova configuração em disco e aplica dinamicamente na execução."""
         new_config.effective_model = new_config.model
-        save_config(new_config)
+
+        startup_changed = bool(getattr(self.config, "start_with_windows", False)) != bool(
+            getattr(new_config, "start_with_windows", False)
+        )
+        if startup_changed:
+            set_startup_enabled(bool(new_config.start_with_windows))
+
+        try:
+            save_config(new_config)
+        except Exception:
+            # Se o arquivo não puder ser persistido, desfaz a alteração do
+            # registro para que configuração e comportamento não diverjam.
+            if startup_changed:
+                try:
+                    set_startup_enabled(bool(getattr(self.config, "start_with_windows", False)))
+                except Exception:
+                    pass
+            raise
 
         # Verifica se as hotkeys mudaram
         hk_changed = (

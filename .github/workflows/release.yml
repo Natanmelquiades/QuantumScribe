@@ -5,11 +5,13 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-linux:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -20,7 +22,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: requirements-linux.txt
+          cache-dependency-path: requirements-build-linux.lock
 
       - name: Install Linux system dependencies
         run: |
@@ -29,33 +31,32 @@ jobs:
             portaudio19-dev libcairo2-dev libgirepository-2.0-dev \
             gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
 
-      - name: Build Linux application
+      - name: Build and validate Linux Core
         run: bash build_linux.sh
 
-      - name: Validate and package Linux application
+      - name: Package validated Linux application
         run: |
           version=$(python -c "from localwhisper import __version__; print(__version__)")
           test -x dist/QuantumScribe/QuantumScribe
+          test -f dist/QuantumScribe-inventory.json
           tar -czf "QuantumScribe-Core-$version-Linux-x64.tar.gz" \
             -C dist QuantumScribe -C .. install_linux_shortcut.sh
           sha256sum "QuantumScribe-Core-$version-Linux-x64.tar.gz" > SHA256SUMS-Linux.txt
 
-      - name: Create draft release with Linux assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(python -c "from localwhisper import __version__; print(__version__)")
-          tag="${{ github.ref_name }}"
-          assets=("QuantumScribe-Core-$version-Linux-x64.tar.gz" "SHA256SUMS-Linux.txt")
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "${assets[@]}" --clobber
-          else
-            gh release create "$tag" "${assets[@]}" --draft --generate-notes --verify-tag
-          fi
+      - name: Store validated Linux artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release
+          if-no-files-found: error
+          path: |
+            QuantumScribe-Core-*-Linux-x64.tar.gz
+            SHA256SUMS-Linux.txt
 
   build-windows:
     needs: build-linux
     runs-on: windows-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -67,11 +68,17 @@ jobs:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: |
-            requirements-cpu.lock
+            requirements-core.lock
             requirements-build.lock
             requirements-test.lock
             requirements-cuda-component.txt
             requirements-vad-component.txt
+
+      - name: Download validated Linux artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-release
+          path: linux-release
 
       - name: Install validation dependencies
         run: python -m pip install --require-hashes -r requirements-test.lock
@@ -81,77 +88,91 @@ jobs:
           python -m compileall -q main.py localwhisper scripts tests
           python -m ruff check main.py localwhisper scripts tests
           python -m pytest -q
-          python -m pip_audit -r requirements-cpu.lock --no-deps --disable-pip --progress-spinner off
+          python -m pip check
+          python -m pip_audit -r requirements-core.lock --no-deps --disable-pip --progress-spinner off
           python -m pip_audit -r requirements-cuda-component.txt --no-deps --disable-pip --progress-spinner off
           python -m pip_audit -r requirements-vad-component.txt --no-deps --disable-pip --progress-spinner off
 
       - name: Install NSIS
         run: choco install nsis --version=3.11.0 --no-progress -y
 
-      - name: Build Core and installer
+      - name: Build and inventory Core
         shell: pwsh
         run: .\build.ps1 -Installer
 
-      - name: Assert Core has no heavy optional runtimes
+      - name: Assert Core has no forbidden optional runtimes
         shell: pwsh
         run: |
-          $forbidden = Get-ChildItem dist\QuantumScribe -Recurse -ErrorAction Stop | Where-Object {
-            $_.FullName -match '\\(torch|torchaudio|silero_vad|nvidia)(\\|$)'
-          }
-          if ($forbidden) {
-            $forbidden.FullName | Write-Error
-            throw "O Core contém dependências opcionais pesadas."
+          $report = Get-Content dist\QuantumScribe-inventory.json | ConvertFrom-Json
+          if (-not $report.policy.passed) {
+            throw "Inventário do Core reprovado: $($report.forbidden_matches | ConvertTo-Json -Compress)"
           }
 
-      - name: Build verified optional components
+      - name: Build and validate optional components
         shell: pwsh
         run: .\scripts\build_optional_components.ps1
 
+      - name: Verify Linux checksum before publication
+        shell: pwsh
+        run: |
+          $linuxArchive = Get-ChildItem linux-release\QuantumScribe-Core-*-Linux-x64.tar.gz -File | Select-Object -First 1
+          if (-not $linuxArchive) { throw "Artefato Linux validado ausente." }
+          $expected = (Get-Content linux-release\SHA256SUMS-Linux.txt).Split()[0].ToLowerInvariant()
+          $actual = (Get-FileHash $linuxArchive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Checksum Linux não confere." }
+
       - name: Create consolidated checksums
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           $version = (Select-String -Path localwhisper\__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-          $tag = "${{ github.ref_name }}"
+          $linuxArchive = Get-ChildItem linux-release\QuantumScribe-Core-*-Linux-x64.tar.gz -File -ErrorAction Stop | Select-Object -First 1
           $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
           $cuda = Get-ChildItem "dist\QuantumScribe-CUDA-$version-Windows-x64.zip" -File -ErrorAction Stop
           $vad = Get-ChildItem "dist\QuantumScribe-SileroVAD-$version-Windows-x64.zip" -File -ErrorAction Stop
-          $files = @($installer.FullName, $cuda.FullName, $vad.FullName)
-          gh release download $tag --pattern "SHA256SUMS-Linux.txt" --dir .
-          if ($LASTEXITCODE -ne 0) {
-            throw "Não foi possível obter o checksum do pacote Linux."
-          }
-          $linuxLines = Get-Content SHA256SUMS-Linux.txt
-          $windowsLines = foreach ($file in $files) {
-            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          $files = @($linuxArchive.FullName, $installer.FullName, $cuda.FullName, $vad.FullName)
+          $linuxLines = Get-Content linux-release\SHA256SUMS-Linux.txt
+          $allLines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $(Split-Path $file -Leaf)"
           }
-          @($linuxLines) + @($windowsLines) | Set-Content SHA256SUMS.txt -Encoding ascii
+          @($linuxLines) + @($allLines) | Set-Content SHA256SUMS.txt -Encoding ascii
 
-      - name: Create GitHub Release
-        shell: pwsh
+      - name: Store validated Windows artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release
+          if-no-files-found: error
+          path: |
+            dist/QuantumScribe-Setup-*-Windows-x64.exe
+            dist/QuantumScribe-CUDA-*-Windows-x64.zip
+            dist/QuantumScribe-SileroVAD-*-Windows-x64.zip
+            dist/QuantumScribe-inventory.json
+            SHA256SUMS.txt
+
+  publish:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download validated artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: "*-release"
+          merge-multiple: true
+          path: release-assets
+
+      - name: Publish validated release
+        working-directory: release-assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = (Select-String -Path localwhisper\__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-          $installer = Get-ChildItem dist\QuantumScribe-Setup-*-Windows-x64.exe -File -ErrorAction Stop | Select-Object -First 1
-          $tag = "${{ github.ref_name }}"
-          $assets = @(
-            $installer.FullName,
-            "dist\QuantumScribe-CUDA-$version-Windows-x64.zip",
-            "dist\QuantumScribe-SileroVAD-$version-Windows-x64.zip",
-            "SHA256SUMS.txt"
-          )
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $assets --clobber
-          } else {
-            gh release create $tag $assets --draft --generate-notes --verify-tag
-          }
-          gh release delete-asset $tag "SHA256SUMS-Linux.txt" --yes
-          if ($LASTEXITCODE -ne 0) {
-            throw "Não foi possível remover o checksum Linux temporário."
-          }
-          gh release delete-asset $tag "QuantumScribe-Core-$version-Windows-x64.zip" --yes *> $null
-          gh release edit $tag --draft=false --latest
+          tag="${{ github.ref_name }}"
+          assets=(QuantumScribe-Core-*-Linux-x64.tar.gz \
+            dist/QuantumScribe-Setup-*-Windows-x64.exe \
+            dist/QuantumScribe-CUDA-*-Windows-x64.zip \
+            dist/QuantumScribe-SileroVAD-*-Windows-x64.zip \
+            SHA256SUMS.txt)
+          gh release create "$tag" "${assets[@]}" --draft --generate-notes --verify-tag
+          gh release edit "$tag" --draft=false --latest

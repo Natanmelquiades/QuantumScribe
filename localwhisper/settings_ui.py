@@ -37,6 +37,7 @@ from .download_progress import (
 )
 from .hotkey import _parse_hotkey
 from .rewriter import _PINNED_REVISIONS
+from .startup import supports_startup
 from .theme import ACCENT_PRESETS, DEFAULT_ACCENT, Theme, build_theme, font_family
 
 _HOTKEY_FIELDS = {
@@ -369,11 +370,12 @@ class SettingsWindow(tk.Toplevel):
     SIDEBAR_SECTIONS: list[tuple[str, str, str]] = [
         ("appearance", "◐", "Aparência"),
         ("dictation", "🎙", "Ditado"),
-        ("ai", "✦", "Inteligência Artificial"),
         ("audio", "🎧", "Microfone e Áudio"),
+        ("ai", "✦", "Inteligência Artificial"),
         ("shortcuts", "⌨", "Atalhos"),
         ("brain", "🧠", "Quantum Brain"),
         ("storage", "💾", "Armazenamento"),
+        ("system", "⚙", "Sistema"),
         ("about", "ℹ", "Sobre"),
     ]
 
@@ -385,6 +387,7 @@ class SettingsWindow(tk.Toplevel):
         "shortcuts": ("Atalhos", "Teclas de atalho globais do aplicativo."),
         "brain": ("Quantum Brain", "Seu segundo cérebro: notas, sínteses e projetos."),
         "storage": ("Armazenamento", "Histórico local de transcrições."),
+        "system": ("Sistema", "Inicialização e comportamento do aplicativo."),
         "about": ("Sobre", "Versão, sistema e créditos."),
     }
 
@@ -436,6 +439,7 @@ class SettingsWindow(tk.Toplevel):
         self.remove_fillers_var = tk.BooleanVar(value=cfg.remove_fillers)
         self.quantum_brain_enabled_var = tk.BooleanVar(value=cfg.quantum_brain_enabled)
         self.quantum_brain_also_paste_var = tk.BooleanVar(value=cfg.quantum_brain_also_paste)
+        self.start_with_windows_var = tk.BooleanVar(value=getattr(cfg, "start_with_windows", False))
 
         try:
             self._icon_img = load_or_generate_icon()
@@ -726,8 +730,8 @@ class SettingsWindow(tk.Toplevel):
         row = self._row_base(card, label, desc)
 
         def changed(value: bool) -> None:
-            self._set(field, value, toast=toast)
-            if on_change:
+            saved = self._set(field, value, toast=toast)
+            if saved and on_change:
                 on_change(value)
 
         switch = AppleSwitch(row, self.theme, variable, command=changed, bg=self.theme.card_bg)
@@ -826,8 +830,9 @@ class SettingsWindow(tk.Toplevel):
     # ------------------------------------------------------------------
 
     def _set(self, field: str, value, toast: str | None = None,
-             toast_kind: str = "success") -> None:
+             toast_kind: str = "success") -> bool:
         """Grava o campo na configuração e aplica imediatamente no app."""
+        previous_cfg = copy.deepcopy(self._cfg)
         setattr(self._cfg, field, value)
         # AppConfig também é atualizado fora do construtor pela UI. Reaplique
         # invariantes aqui para que um controle incompatível nunca pareça ativo.
@@ -837,16 +842,30 @@ class SettingsWindow(tk.Toplevel):
             ("remove_fillers", "remove_fillers_var"),
             ("continuous_learning", "learning_var"),
             ("use_llm_rewriter", "rewriter_var"),
+            ("start_with_windows", "start_with_windows_var"),
         ):
             variable = getattr(self, variable_name, None)
             if variable is not None:
                 variable.set(getattr(self._cfg, config_field))
         try:
             self.on_save_callback(self._cfg)
-        except Exception:
-            pass
+        except Exception as error:
+            self._cfg = previous_cfg
+            for config_field, variable_name in (
+                ("remove_stutters", "remove_stutters_var"),
+                ("remove_fillers", "remove_fillers_var"),
+                ("continuous_learning", "learning_var"),
+                ("use_llm_rewriter", "rewriter_var"),
+                ("start_with_windows", "start_with_windows_var"),
+            ):
+                variable = getattr(self, variable_name, None)
+                if variable is not None:
+                    variable.set(getattr(self._cfg, config_field))
+            self._toast(f"Não foi possível salvar: {error}", "error")
+            return False
         if toast:
             self._toast(toast, toast_kind)
+        return True
 
     def _toast(self, message: str, kind: str = "success") -> None:
         if self._toast_after_id:
@@ -927,11 +946,12 @@ class ScrollArea(tk.Frame):
 def _register_pages(self: SettingsWindow) -> None:
     self._register_page("appearance", self._page_appearance)
     self._register_page("dictation", self._page_dictation)
-    self._register_page("ai", self._page_ai)
     self._register_page("audio", self._page_audio)
+    self._register_page("ai", self._page_ai)
     self._register_page("shortcuts", self._page_shortcuts)
     self._register_page("brain", self._page_brain)
     self._register_page("storage", self._page_storage)
+    self._register_page("system", self._page_system)
     self._register_page("about", self._page_about)
     # Subpáginas de Ditado
     self._register_page("sub_model", self._page_sub_model, parent="dictation")
@@ -2498,6 +2518,50 @@ def _page_storage(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
 
 
 SettingsWindow._page_storage = _page_storage
+
+
+# ---------------------------------------------------------------------------
+# PÁGINA: SISTEMA
+# ---------------------------------------------------------------------------
+
+def _page_system(self: SettingsWindow, parent: tk.Widget) -> tk.Frame:
+    """Preferências do ciclo de vida do aplicativo e integração com o SO."""
+    page, body = self._page_shell(*self.SECTION_TITLES["system"])
+
+    card = self._card(body, "Inicialização")
+    if supports_startup():
+        self._row_toggle(
+            card,
+            "Iniciar com o Windows",
+            "Abre o Quantum Scribe automaticamente quando você entrar na sua conta. "
+            "Não exige permissão de administrador.",
+            self.start_with_windows_var,
+            "start_with_windows",
+            toast="Inicialização com o Windows atualizada",
+        )
+        self._row_base(
+            card,
+            "Escopo da inicialização",
+            "A opção vale somente para este usuário do Windows e pode ser desligada a qualquer momento.",
+        )
+    else:
+        self._row_base(
+            card,
+            "Iniciar com o Windows",
+            "Disponível somente quando o aplicativo está sendo executado no Windows.",
+        )
+
+    card = self._card(body, "Aplicação das configurações")
+    self._row_base(
+        card,
+        "Alterações instantâneas",
+        "Os controles são aplicados assim que você os altera. Se o sistema rejeitar uma mudança, "
+        "o botão volta automaticamente ao estado anterior.",
+    )
+    return page
+
+
+SettingsWindow._page_system = _page_system
 
 
 def _refresh_transcriptions_list(self: SettingsWindow, query: str = "") -> None:

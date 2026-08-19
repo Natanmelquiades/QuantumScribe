@@ -59,12 +59,18 @@ def apply_highpass_filter(audio: np.ndarray, cutoff_hz: float = 80.0) -> np.ndar
     Returns:
         Array float32 filtrado. Se scipy não estiver disponível, retorna intacto.
     """
+    # ``filtfilt`` precisa de uma janela mínima para o padding interno. Chunks
+    # finais muito curtos são válidos no streaming, mas não têm amostras
+    # suficientes para um filtro estável; nesse caso, preserve o sinal.
+    if audio.size <= 15:
+        return audio
+
     try:
         from scipy.signal import butter, filtfilt
         nyquist = SAMPLE_RATE / 2.0
         b, a = butter(4, cutoff_hz / nyquist, btype="high")
         return filtfilt(b, a, audio).astype(np.float32)
-    except ImportError:
+    except (ImportError, ValueError, RuntimeError):
         return audio
 
 
@@ -82,6 +88,11 @@ def apply_noise_reduction(audio: np.ndarray) -> np.ndarray:
         Array float32 com ruído reduzido. Se noisereduce não estiver disponível,
         retorna intacto.
     """
+    # A redução espectral não produz resultado confiável em buffers menores
+    # que uma janela FFT completa e algumas bibliotecas falham nesses casos.
+    if audio.size < 512:
+        return audio
+
     try:
         import noisereduce as nr
         reduced = nr.reduce_noise(
@@ -94,7 +105,7 @@ def apply_noise_reduction(audio: np.ndarray) -> np.ndarray:
             hop_length=128,
         )
         return reduced.astype(np.float32)
-    except ImportError:
+    except (ImportError, ValueError, RuntimeError):
         return audio
 
 
@@ -110,6 +121,9 @@ def apply_rms_normalization(audio: np.ndarray) -> np.ndarray:
     Returns:
         Array float32 com volume normalizado.
     """
+    if audio.size == 0:
+        return audio
+
     rms = float(np.sqrt(np.mean(audio ** 2)))
 
     # Sinal de silêncio puro — não aplica ganho para evitar amplificar ruído de fundo

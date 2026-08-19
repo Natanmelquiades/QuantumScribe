@@ -81,6 +81,8 @@ mesmo sem prioridade ou especificação completa. Durante o refinamento, cada it
 | QS-025 | Concluir o Quantum Brain com resultado verificável | Bug | Em refinamento | P2 — Média | M | A criar |
 | QS-026 | Retirar compatibilidades e artefatos obsoletos com migração segura | Débito técnico | Em refinamento | P2 — Média | M | A criar |
 | QS-027 | Inicialização rápida de dispositivos de áudio virtuais no Windows | Melhoria | Em refinamento | P1 — Alta | M | A criar |
+| QS-028 | Iniciar automaticamente com o Windows | Feature | Concluído | P1 — Alta | M | A criar |
+| QS-029 | Organizar configurações e tornar toggles verificáveis | Melhoria | Concluído | P2 — Média | M | A criar |
 
 ## Programa de implementação
 
@@ -1050,7 +1052,40 @@ _Nenhum item._
 
 ## Concluído
 
-_Nenhum item registrado neste backlog._
+### QS-028 — Iniciar automaticamente com o Windows
+
+- **Tipo:** Feature de integração com o sistema operacional.
+- **Prioridade preliminar:** P1 — Alta.
+- **Esforço preliminar:** M.
+- **Problema:** não havia uma opção visível para o usuário iniciar o Quantum
+  Scribe junto com o Windows, nem uma forma confiável de desligar essa
+  preferência.
+- **Resultado entregue:** nova opção em `Sistema > Inicialização`, persistida
+  por usuário no registro `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`.
+  O mesmo controle ativa e remove a entrada, sem exigir administrador.
+- **Regras e segurança:** o comando é montado somente a partir do executável
+  atual (ou do `main.py` no modo de desenvolvimento); em outros sistemas a
+  opção é informativa e não tenta alterar o sistema.
+- **Critérios validados:** ativar, consultar e desativar a entrada com testes
+  isolados; preferência persistida no `AppConfig`; erro de registro não é
+  salvo como se tivesse sido aplicado.
+
+### QS-029 — Organizar configurações e tornar toggles verificáveis
+
+- **Tipo:** Melhoria de interface e confiabilidade.
+- **Prioridade preliminar:** P2 — Média.
+- **Esforço preliminar:** M.
+- **Problema:** preferências de sistema não tinham uma categoria própria e a
+  tela podia esconder falhas de aplicação, deixando um botão visualmente ativo
+  mesmo quando o app não conseguiu salvar a mudança.
+- **Resultado entregue:** ordem lateral reorganizada para seguir o fluxo
+  Aparência → Ditado → Áudio → IA → Atalhos → Brain → Armazenamento → Sistema
+  → Sobre; nova página Sistema com explicações curtas e indicação do escopo.
+  O mecanismo comum de toggles agora reverte o valor e mostra erro quando o
+  callback de aplicação falha.
+- **Critérios validados:** regressão de rollback coberta por teste sem Tk real;
+  toggles dependentes só reconstruem a página após uma gravação bem-sucedida;
+  suíte focada passou integralmente.
 
 ## Descartado
 

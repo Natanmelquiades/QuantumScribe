@@ -1,6 +1,7 @@
 param(
     [switch]$Cuda,
-    [switch]$Installer
+    [switch]$Installer,
+    [string]$PythonCommand = "python"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +13,7 @@ $BuildPython = Join-Path $BuildVenv "Scripts\python.exe"
 
 if (-not (Test-Path $BuildPython)) {
     Write-Host "Criando ambiente isolado de build em $BuildVenv..."
-    python -m venv $BuildVenv
+    & $PythonCommand -m venv $BuildVenv
     if ($LASTEXITCODE -ne 0) {
         throw "Falha ao criar o ambiente isolado de build."
     }
@@ -29,6 +30,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "Falha ao instalar as dependências de build."
 }
 
+& $BuildPython -m pip check
+if ($LASTEXITCODE -ne 0) {
+    throw "O ambiente reproduzível de build possui dependências inconsistentes."
+}
+
 & $BuildPython scripts\prepare_windows_build.py
 if ($LASTEXITCODE -ne 0) {
     throw "Falha ao preparar o ícone e os metadados do Windows."
@@ -37,6 +43,11 @@ if ($LASTEXITCODE -ne 0) {
 & $BuildPython -m PyInstaller --clean --noconfirm QuantumScribe.spec
 if ($LASTEXITCODE -ne 0) {
     throw "Falha ao gerar o executável com PyInstaller."
+}
+
+& $BuildPython scripts\inventory_bundle.py dist\QuantumScribe --output dist\QuantumScribe-inventory.json --max-bytes 262144000
+if ($LASTEXITCODE -ne 0) {
+    throw "O Core viola o limite de 250 MB ou contém artefatos proibidos."
 }
 
 Write-Host ""

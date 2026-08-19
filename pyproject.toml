@@ -1,6 +1,6 @@
 [project]
 name = "quantumscribe"
-version = "2.2.31"
+version = "2.2.34"
 description = "Ditado por voz local para Windows e Linux com faster-whisper."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -29,6 +29,8 @@ exclude = [
     ".cursor",
     ".gemini",
     ".kimi",
+    ".agents",
+    "tmp",
 ]
 
 [tool.ruff.lint]
