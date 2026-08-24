@@ -21,6 +21,7 @@ Destaques da Implementação:
    - "atom": átomo clássico com órbitas inclinadas.
    - "atom_compact": novo tema compacto (180x38), perfeitamente oval (raio 19)
      e com átomo mais delicado, reduzindo espaços vazios.
+   - "liquid_orb": orb líquido rasterizado em baixa resolução, sem GPU.
 
 4. Barra de Progresso Premium:
    Barra de carregamento animada exibida durante transcrição, adaptando-se
@@ -37,6 +38,7 @@ from collections.abc import Callable
 from PIL import Image, ImageDraw, ImageTk
 
 from .config import AppConfig
+from .hud_effects import LiquidOrbRenderer
 from .platform import make_window_no_activate
 
 # ---------- Cores e Configurações de Layout ----------
@@ -125,7 +127,28 @@ LAYOUTS = {
         "dot_x0": 0,
         "dot_gap": 0,
         "dot_r": 0,
-    }
+    },
+    "orb": {
+        "width": 64,
+        "height": 64,
+        "radius": 32,
+        "tx": 0,
+        "ty_title": 0,
+        "ty_sub": 0,
+        "prog_x": 0,
+        "prog_y": 0,
+        "prog_w": 0,
+        "prog_h": 0,
+        "atom_cx": 32,
+        "atom_cy": 32,
+        "atom_a": 23,
+        "atom_b": 20,
+        "atom_nucleus_r": 2.5,
+        "atom_electron_r": 1.8,
+        "dot_x0": 0,
+        "dot_gap": 0,
+        "dot_r": 0,
+    },
 }
 
 
@@ -208,6 +231,11 @@ class Popup:
         self._error_jitter_x = 0.0
         self._error_jitter_y = 0.0
         self._error_timer = 0
+        self._liquid_orb_renderer: LiquidOrbRenderer | None = None
+        self._liquid_orb_photo: ImageTk.PhotoImage | None = None
+        self._liquid_orb_failed = False
+        self._liquid_orb_last_error = ""
+        self._liquid_orb_explosion_progress = 0.0
 
         # Layout ativo (inicializa com o padrão classic)
         self._active_layout = LAYOUTS["classic"]
@@ -240,6 +268,9 @@ class Popup:
         self._pill_photo: ImageTk.PhotoImage | None = None
         self._render_pill(230, 46, 22)
         self._bg_image_id = self.canvas.create_image(0, 0, anchor="nw", image=self._pill_photo)
+        self._liquid_orb_id = self.canvas.create_image(
+            32, 32, anchor="center", state="hidden",
+        )
 
         # ---- Tema "dots": bolinhas ----
         self._dot_ids: list[int] = []
@@ -380,12 +411,17 @@ class Popup:
         self._new_visual_generation()
         self._active_theme = theme
         self._atom_color = color
+        self._liquid_orb_failed = False
+        if theme == "liquid_orb" and not self._ensure_liquid_orb_renderer():
+            self._liquid_orb_failed = True
+            self._active_theme = "atom_centered"
+        theme = self._active_theme
         self.smooth_amp = 0.0
         self._hide_progress()
         self._is_condensing = False
         self._is_exploding = False
 
-        only_atom = (theme == "atom_centered")
+        only_atom = theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.hud_state = "recording"
             self._only_atom_scale = 1.0
@@ -406,9 +442,12 @@ class Popup:
     def show_processing_with_progress(self, audio_duration: float, title_override: str = "Transcrevendo…") -> None:
         """Exibe o HUD no estado de processamento/transcrição local do Whisper."""
         self._new_visual_generation()
+        if self._active_theme == "liquid_orb" and not self._ensure_liquid_orb_renderer():
+            self._liquid_orb_failed = True
+            self._active_theme = "atom_centered"
         self._apply_layout(self._active_theme)
 
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.hud_state = "transcribing"
             self.animating = True
@@ -442,7 +481,7 @@ class Popup:
 
     def complete_progress(self) -> None:
         """Finaliza o preenchimento da barra de progresso."""
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.trigger_explosion()
             return
@@ -460,13 +499,16 @@ class Popup:
         """Exibe o HUD no estado de carregamento do modelo de IA."""
         self._new_visual_generation()
         self.animating = False
+        if self._active_theme == "liquid_orb" and not self._ensure_liquid_orb_renderer():
+            self._liquid_orb_failed = True
+            self._active_theme = "atom_centered"
         self._apply_layout(self._active_theme)
         self._set_content("Carregando modelo…", "Inicializando IA")
         self._reset_indicators()
         self._position()
         self.window.deiconify()
 
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.hud_state = "transcribing"
             self.animating = True
@@ -475,7 +517,7 @@ class Popup:
     def show_message(self, title: str, subtitle: str = "", error: bool = False) -> None:
         """Exibe uma mensagem temporária de status ou erro no HUD."""
         self._new_visual_generation()
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             if error:
                 self.hud_state = "error"
@@ -508,11 +550,12 @@ class Popup:
 
     def trigger_explosion(self) -> None:
         """Dispara a animação final de explosão do átomo minimalista antes de fechar."""
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.hud_state = "exploding"
             self.animating = True
             self._explosion_frame = 0
+            self._liquid_orb_explosion_progress = 0.0
             self._animate(self._visual_generation)
             return
 
@@ -567,7 +610,7 @@ class Popup:
         )
 
     def _set_content(self, title: str, subtitle: str, title_color: str = TEXT_COLOR) -> None:
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.canvas.itemconfigure(self._title_id, state="hidden")
             self.canvas.itemconfigure(self._sub_id, state="hidden")
@@ -579,7 +622,7 @@ class Popup:
         self.canvas.itemconfigure(self._sub_id, text=subtitle)
 
     def set_text(self, title: str, subtitle: str, error: bool = False) -> None:
-        only_atom = (self._active_theme == "atom_centered")
+        only_atom = self._active_theme in ("atom_centered", "liquid_orb")
         if only_atom:
             self.canvas.itemconfigure(self._title_id, state="hidden")
             self.canvas.itemconfigure(self._sub_id, state="hidden")
@@ -591,19 +634,90 @@ class Popup:
         self.canvas.itemconfigure(self._title_id, text=title, fill=color)
         self.canvas.itemconfigure(self._sub_id, text=subtitle)
 
+    def _ensure_liquid_orb_renderer(self) -> bool:
+        """Cria o renderer sob demanda e registra falhas sem expor exceções."""
+        if self._liquid_orb_renderer is not None:
+            return True
+        try:
+            self._liquid_orb_renderer = LiquidOrbRenderer(size=56)
+            return True
+        except Exception as exc:
+            self._liquid_orb_last_error = f"{type(exc).__name__}: {exc}"
+            return False
+
+    def _fallback_liquid_orb(self, generation: int) -> None:
+        """Troca apenas a sessão atual para o HUD central seguro."""
+        if generation != self._visual_generation or self._active_theme != "liquid_orb":
+            return
+        current_state = self.hud_state
+        self._liquid_orb_renderer = None
+        self._liquid_orb_failed = True
+        self._active_theme = "atom_centered"
+        self._apply_layout("atom_centered")
+        self.hud_state = current_state
+        self._reset_indicators()
+        self._position()
+        self.animating = True
+        self._animate_atom(generation)
+
+    def _render_liquid_orb_frame(
+        self,
+        generation: int,
+        *,
+        time_value: float,
+        amplitude: float,
+        state: str,
+        scale: float,
+        opacity: float,
+        jitter: tuple[float, float] = (0.0, 0.0),
+    ) -> bool:
+        """Atualiza a imagem do orb ou aciona o fallback da sessão."""
+        if generation != self._visual_generation or self._active_theme != "liquid_orb":
+            return False
+        try:
+            if not self._ensure_liquid_orb_renderer():
+                raise RuntimeError(self._liquid_orb_last_error or "renderer indisponível")
+            frame = self._liquid_orb_renderer.render(
+                time_value=time_value,
+                color=getattr(self, "_atom_color", "#BF5AF2"),
+                amplitude=amplitude,
+                state=state,
+                scale=scale,
+                opacity=opacity,
+                jitter=jitter,
+            )
+            self._liquid_orb_photo = ImageTk.PhotoImage(frame)
+            lay = self._active_layout
+            self.canvas.coords(self._liquid_orb_id, lay["atom_cx"], lay["atom_cy"])
+            self.canvas.itemconfigure(
+                self._liquid_orb_id,
+                image=self._liquid_orb_photo,
+                state="normal",
+            )
+            return True
+        except Exception as exc:
+            self._liquid_orb_last_error = f"{type(exc).__name__}: {exc}"
+            self._fallback_liquid_orb(generation)
+            return False
+
     # ---------------------------------------------------------------- Layout Dinâmico
 
     def _apply_layout(self, theme: str) -> None:
         """Aplica as configurações geométricas do tema ativo à janela e aos elementos."""
         is_compact = (theme == "atom_compact")
-        lay_key = "compact" if is_compact else "classic"
+        is_liquid_orb = (theme == "liquid_orb")
+        lay_key = "orb" if is_liquid_orb else ("compact" if is_compact else "classic")
         lay = LAYOUTS[lay_key]
 
-        only_atom = (theme == "atom_centered")
+        only_atom = theme in ("atom_centered", "liquid_orb")
 
         if only_atom:
-            width, height, radius = 46, 46, 23
-            cx, cy = 23, 23
+            if is_liquid_orb:
+                width, height, radius = lay["width"], lay["height"], lay["radius"]
+                cx, cy = lay["atom_cx"], lay["atom_cy"]
+            else:
+                width, height, radius = 46, 46, 23
+                cx, cy = 23, 23
         else:
             width, height, radius = lay['width'], lay['height'], lay['radius']
             cx, cy = lay['atom_cx'], lay['atom_cy']
@@ -623,6 +737,7 @@ class Popup:
         self._render_pill(width, height, radius)
         self.canvas.itemconfig(self._bg_image_id, image=self._pill_photo)
         self.canvas.coords(self._bg_image_id, 0, 0)
+        self.canvas.coords(self._liquid_orb_id, cx, cy)
 
         # Reposiciona elementos de texto
         self.canvas.coords(self._title_id, lay['tx'], lay['ty_title'])
@@ -683,6 +798,7 @@ class Popup:
 
     def _reset_indicators(self) -> None:
         """Oculta todos os indicadores e exibe apenas os do tema ativo."""
+        self.canvas.itemconfigure(self._liquid_orb_id, state="hidden")
         for did in self._dot_ids:
             self.canvas.itemconfigure(did, state="hidden")
         self.canvas.itemconfigure(self._atom_nucleus_id, state="hidden")
@@ -695,6 +811,9 @@ class Popup:
             self.canvas.itemconfigure(eid, state="hidden")
 
         theme = self._active_theme
+        if theme == "liquid_orb":
+            self.canvas.itemconfigure(self._liquid_orb_id, state="normal")
+            return
         if theme in ("atom", "atom_compact", "atom_centered"):
             atom_rgb = _hex_to_rgb(self._atom_color)
             orbit_idle = _lerp_color((58, 62, 72), atom_rgb, 0.18)
@@ -739,10 +858,60 @@ class Popup:
         if not self.animating or generation != self._visual_generation:
             return
         self._render_cancel_hold_progress()
-        if self._active_theme in ("atom", "atom_compact", "atom_centered"):
+        if self._active_theme == "liquid_orb":
+            self._animate_liquid_orb(generation)
+        elif self._active_theme in ("atom", "atom_compact", "atom_centered"):
             self._animate_atom(generation)
         else:
             self._animate_dots(generation)
+
+    def _animate_liquid_orb(self, generation: int) -> None:
+        if not self.animating or generation != self._visual_generation:
+            return
+
+        amp = self.get_amplitude() if self.get_amplitude else 0.0
+        amp_clean = max(0.0, amp - 0.0015)
+        target = min(1.0, amp_clean * 300.0)
+        self.smooth_amp = self.smooth_amp * 0.76 + target * 0.24
+        state = self.hud_state if self.hud_state in {
+            "recording", "transcribing", "error", "exploding", "success"
+        } else "recording"
+        scale = 0.88 + self.smooth_amp * 0.22
+        opacity = 1.0
+        jitter = (0.0, 0.0)
+
+        if state == "transcribing":
+            scale = 0.78 + self.smooth_amp * 0.12
+        elif state == "error":
+            scale = 0.92 + self.smooth_amp * 0.12
+            jitter = (math.sin(self.phase * 2.9) * 2.0, math.cos(self.phase * 3.4) * 2.0)
+            self._error_timer += 1
+            if self._error_timer > 40:
+                self._error_timer = 0
+                self.hide(generation)
+                return
+        elif state == "exploding":
+            self._liquid_orb_explosion_progress += 0.14
+            progress = self._liquid_orb_explosion_progress
+            scale = 0.86 + progress * 1.35
+            opacity = max(0.0, 1.0 - progress / 1.1)
+            self.window.attributes("-alpha", 0.88 * opacity)
+            if progress >= 1.1:
+                self.hide(generation)
+                return
+
+        if not self._render_liquid_orb_frame(
+            generation,
+            time_value=self.phase,
+            amplitude=self.smooth_amp,
+            state=state,
+            scale=scale,
+            opacity=opacity,
+            jitter=jitter,
+        ):
+            return
+        self.phase += 0.16
+        self._schedule_animation(30, generation)
 
     def _animate_dots(self, generation: int) -> None:
         if not self.animating or generation != self._visual_generation:

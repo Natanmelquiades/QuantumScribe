@@ -184,6 +184,7 @@ HUD_THEMES: list[tuple[str, str, str]] = [
     ("atom_compact", "Átomo Compacto", "Versão menor e mais oval do átomo."),
     ("atom_centered", "Átomo Centralizado", "Somente o átomo, centralizado no indicador."),
     ("atom_minimal", "Átomo Minimalista", "Traço fino e minimalista, quase invisível."),
+    ("liquid_orb", "Liquid Orb", "Orbe líquido com brilho de vidro e movimento orgânico."),
 ]
 
 ENHANCE_PROFILES: list[tuple[str, str, str]] = [

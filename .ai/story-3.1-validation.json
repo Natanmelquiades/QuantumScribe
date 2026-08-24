@@ -1,0 +1,23 @@
+{
+  "story_id": "3.1",
+  "story_path": "docs/stories/3.1.story.md",
+  "status": "GO",
+  "score": 9,
+  "confidence": "high",
+  "validated_by": "@po (Pax)",
+  "date": "2026-08-23",
+  "transition": "Draft -> Ready",
+  "code_intelligence": "skipped: no configured runtime",
+  "critical_issues": [],
+  "should_fix": [
+    "Definir a prioridade antes do planejamento do sprint."
+  ],
+  "coverage": [
+    "template completeness",
+    "executor and quality gate",
+    "path and source references",
+    "acceptance criteria to task mapping",
+    "testing and fallback readiness",
+    "CodeRabbit configuration"
+  ]
+}
